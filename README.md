@@ -12,7 +12,7 @@ Jeu de dépannage en 3D à la première personne par FBA Games.
 
 ## Jouer
 
-Ouvrir `dist/index.html` dans un navigateur récent, ou servir `dist/` sur un hébergement statique. Le jeu fonctionne hors ligne. Les missions réussies sont mémorisées dans le navigateur.
+Ouvrir `dist/index.html` dans un navigateur récent, ou servir `dist/` sur un hébergement statique. Le jeu fonctionne hors ligne. Chaque mission réussie débloque la suivante. « Jouer » ouvre la liste des missions et « Continuer à jouer » reprend la mission en cours ou propose la prochaine intervention disponible. La progression est enregistrée dans le navigateur.
 
 - Téléphone en paysage : joystick à gauche, glissement sur la scène pour regarder et bouton d’action à droite.
 - Clavier : ZQSD ou WASD pour marcher. Flèches gauche/droite ou glissement à la souris pour regarder. E pour interagir.
