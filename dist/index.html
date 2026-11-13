@@ -38,6 +38,25 @@ small{display:block;color:#bdbdae;line-height:1.45;margin-top:1rem}
 #compass{position:absolute;bottom:4.4rem;left:50%;transform:translateX(-50%);padding:.28rem .55rem;font-size:.77rem;white-space:nowrap}
 #choices{display:grid;gap:.5rem}
 #choices button{text-align:left}
+#workbench{display:grid;gap:.55rem;margin:.65rem 0}
+#toolbox{display:flex;flex-wrap:wrap;gap:.4rem}
+#toolbox button{font-size:.86rem;padding:.5rem .65rem;min-height:44px}
+#toolbox button[aria-pressed=true]{border-color:var(--yellow);color:var(--yellow);background:#473920}
+#partTarget{position:relative;display:grid;place-items:center;gap:.25rem;min-height:90px;width:100%;text-align:center;background:linear-gradient(120deg,#4e5651,#303633 70%);border-color:#7f8a80;touch-action:manipulation}
+#partTarget:hover,#partTarget:focus-visible{border-color:var(--yellow)}
+#partTarget span{color:#fff0c9;font-size:.85rem}
+#partTarget::before{content:'';width:25px;height:25px;border:2px solid #f3d491;border-radius:50%;background:linear-gradient(45deg,transparent 42%,#232721 43%,#232721 57%,transparent 58%),linear-gradient(-45deg,transparent 42%,#232721 43%,#232721 57%,transparent 58%),#96865f;box-shadow:0 0 0 5px #241f195e}
+#partTarget[data-part=nut]::before{border-radius:0;clip-path:polygon(25% 0,75% 0,100% 50%,75% 100%,25% 100%,0 50%);background:radial-gradient(circle,#252921 0 27%,#bcaa7b 30%)}
+#partTarget[data-part=slot]::before{background:linear-gradient(0deg,#96865f 42%,#232721 43% 57%,#96865f 58%)}
+#partTarget[data-part=connector]::before{border-radius:4px;background:repeating-linear-gradient(90deg,#8f805e 0 4px,#292d26 4px 7px)}
+#partTarget[data-part=module]::before{border-radius:5px;background:repeating-linear-gradient(0deg,#474a3c 0 3px,#9d966f 3px 5px)}
+#toolHint{margin:0;font-size:.85rem}
+@media(orientation:landscape) and (max-height:530px){
+  #workbench{grid-template-columns:1fr 1fr}
+  #toolbox{align-content:center}
+  #toolHint{grid-column:1/-1}
+  #partTarget{min-height:76px}
+}
 #description{white-space:pre-line}
 #message{min-height:1.5em;color:var(--yellow);margin:.7rem 0 0}
 dialog{padding:0;border:0;background:none;max-height:calc(100% - 1.2rem);width:min(calc(100% - 1.2rem),33rem);color:inherit}
@@ -116,6 +135,11 @@ dialog .panel{max-height:min(85dvh,46rem)}
 </div>
 <dialog id="dialog"><section class="panel">
   <div class="brand" id="category"></div><h2 id="title"></h2><p id="description"></p>
+  <div id="workbench" hidden>
+    <div id="toolbox" role="group" aria-label="Mallette à outils"></div>
+    <button id="partTarget" type="button"><strong id="partName"></strong><span id="partProgress"></span></button>
+    <p id="toolHint" aria-live="polite"></p>
+  </div>
   <div id="choices"></div><p id="message" role="status"></p>
 </section></dialog>
 <script>
@@ -174,6 +198,13 @@ const missions = [
     colors:['#78827b','#565c52','#83816b','#a78b49']
   }
 ];
+const tools={
+  cross:'Tournevis cruciforme',
+  flat:'Tournevis plat',
+  socket:'Clé à douille',
+  hand:'Main',
+  terminal:'Terminal de maintenance'
+};
 const procedures = [
   {
     panel:'Protection déclenchée lors de la demande de chauffe.',
@@ -181,7 +212,11 @@ const procedures = [
       ['Consulter le journal du four','La coupure correspond au démarrage de la chauffe. La minuterie et l’afficheur répondaient.'],
       ['Tester le module de chauffe hors tension','Le simulateur signale un défaut d’isolement sur le module de chauffe.']
     ],
-    work:[['Déposer le module défectueux','Le module est retiré et la référence de la pièce est relevée.'],['Installer le module de rechange','Le module de même référence est installé.'],['Remettre le capot','Le four est refermé et prêt pour l’essai.']],
+    work:[
+      {"label":"Déposer le module défectueux","target":"Vis de fixation du module","tool":"cross","points":2,"result":"Le module est libéré de son support.","part":"screw","hint":"Desserre les deux vis de fixation."},
+      {"label":"Installer le module de rechange","target":"Logement du module","tool":"hand","points":1,"result":"Le module de rechange est en place.","part":"module","hint":"Place le module de même référence dans son logement."},
+      {"label":"Remettre le capot","target":"Vis du capot","tool":"cross","points":2,"result":"Le capot est fixé.","part":"screw","hint":"Resserre les deux vis du capot."}
+    ],
     trial:'Lancer un cycle de préchauffage',
     result:'La température monte et la protection ne déclenche plus.'
   },
@@ -191,7 +226,11 @@ const procedures = [
       ['Relire les événements du détecteur','Un passage est bien enregistré et la commande d’allumage est transmise.'],
       ['Contrôler le relais sur le banc de test','Le relais reçoit la commande simulée, mais son contact ne bascule pas.']
     ],
-    work:[['Retirer le relais défectueux','Le relais est retiré de son support.'],['Poser le relais de rechange','Le nouveau relais est en place.'],['Refermer l’armoire','L’armoire est refermée.']],
+    work:[
+      {"label":"Retirer le relais défectueux","target":"Languette du relais","tool":"flat","points":1,"result":"Le relais est dégagé du rail.","part":"slot","hint":"Libère la languette fendue qui retient le relais."},
+      {"label":"Poser le relais de rechange","target":"Rail du relais","tool":"hand","points":1,"result":"Le relais neuf est clipsé.","part":"module","hint":"Clipse le relais de rechange sur son support."},
+      {"label":"Refermer l’armoire","target":"Vis du capot","tool":"cross","points":2,"result":"Le capot de l’armoire est fixé.","part":"screw","hint":"Fixe le capot avec ses deux vis à empreinte en croix."}
+    ],
     trial:'Simuler un passage dans l’allée',
     result:'Les plafonniers s’allument au passage, puis s’éteignent après la temporisation de test.'
   },
@@ -201,7 +240,11 @@ const procedures = [
       ['Consulter le journal de la console','Le premier effet a bien été envoyé. Le signal de commande est arrivé au rack.'],
       ['Tester le module sur le banc de test','L’entrée répond, mais la sortie du module reste inactive sur une charge de test.']
     ],
-    work:[['Repérer les connexions du module','Les connexions du module sont identifiées dans le rack.'],['Échanger le module de puissance','Le module de remplacement est raccordé dans la simulation.'],['Refermer le rack','Le rack est prêt pour l’essai de scène.']],
+    work:[
+      {"label":"Débrancher le module","target":"Connecteur du module","tool":"hand","points":1,"result":"Le connecteur est dégagé.","part":"connector","hint":"Appuie sur le clip du connecteur repéré et retire-le."},
+      {"label":"Échanger le module de puissance","target":"Vis du module","tool":"cross","points":2,"result":"Le module de rechange est fixé.","part":"screw","hint":"Agis sur les deux vis à empreinte en croix du module."},
+      {"label":"Raccorder le module","target":"Connecteur du module","tool":"hand","points":1,"result":"Le connecteur est clipsé. Le rack est prêt pour l’essai.","part":"connector","hint":"Remets le connecteur repéré dans son logement."}
+    ],
     trial:'Jouer le premier effet lumière',
     result:'Les projecteurs répondent et suivent la séquence de la console.'
   },
@@ -211,7 +254,11 @@ const procedures = [
       ['Lire l’historique des alarmes','Le ventilateur s’est arrêté avant la mise en sécurité du groupe.'],
       ['Inspecter le ventilateur à l’arrêt','La grille est dégagée. Le contrôle du simulateur confirme que le moteur du ventilateur est bloqué.']
     ],
-    work:[['Déposer le ventilateur bloqué','Le ventilateur est retiré du condenseur.'],['Monter le ventilateur de rechange','Le ventilateur de rechange est posé.'],['Reposer la grille de protection','La grille est en place et le groupe peut être essayé.']],
+    work:[
+      {"label":"Déposer le ventilateur bloqué","target":"Écrous du support","tool":"socket","points":3,"result":"Le support du ventilateur est libéré.","part":"nut","hint":"Desserre les trois écrous à six pans du support."},
+      {"label":"Monter le ventilateur de rechange","target":"Écrous du ventilateur neuf","tool":"socket","points":3,"result":"Le ventilateur de rechange est fixé.","part":"nut","hint":"Fixe le ventilateur neuf sur les trois écrous de son support."},
+      {"label":"Reposer la grille de protection","target":"Vis de la grille","tool":"cross","points":2,"result":"La grille de protection est fixée.","part":"screw","hint":"Resserre les deux vis à empreinte en croix de la grille."}
+    ],
     trial:'Lancer un cycle de froid',
     result:'Le ventilateur tourne, l’alarme disparaît et la température commence à baisser.'
   },
@@ -221,7 +268,11 @@ const procedures = [
       ['Consulter le journal de la baie','Les données horaires arrivent toujours au commutateur de la baie.'],
       ['Tester la liaison vers les écrans','La liaison répond au banc de test. Le contrôleur ne transmet plus les mises à jour.']
     ],
-    work:[['Récupérer la configuration de la baie','Une copie de la configuration des écrans est disponible.'],['Échanger et configurer le contrôleur','Le nouveau contrôleur reprend la configuration des écrans.'],['Refermer la baie','La baie est refermée et prête à synchroniser les horaires.']],
+    work:[
+      {"label":"Sauvegarder la configuration","target":"Interface de la baie","tool":"terminal","points":1,"result":"La configuration a été copiée.","part":"connector","hint":"Récupère les paramètres des écrans depuis l’interface de maintenance simulée."},
+      {"label":"Échanger le contrôleur","target":"Clip de fixation du contrôleur","tool":"hand","points":1,"result":"Le contrôleur de rechange est en place.","part":"module","hint":"Libère le clip et emboîte le contrôleur de rechange."},
+      {"label":"Restaurer la configuration","target":"Interface du contrôleur","tool":"terminal","points":1,"result":"Le contrôleur a chargé les paramètres des écrans.","part":"connector","hint":"Charge la configuration sauvegardée sur le nouveau contrôleur."}
+    ],
     trial:'Envoyer un horaire de test aux écrans',
     result:'Le quai et l’heure se mettent à jour sur tous les écrans, puis l’affichage normal reprend.'
   }
@@ -264,6 +315,7 @@ function saveProgress(){
     secured:progress.secured,
     checks:[...progress.checks],
     work:progress.work,
+    toolUses:progress.toolUses,
     energized:progress.energized,
     verified:progress.verified
   };
@@ -285,6 +337,7 @@ function openPanel(category, title, description, actions, feedback = ''){
   keys.clear();
   resetPad();
   look = null;
+  get('workbench').hidden=true;
   get('category').textContent = category;
   get('title').textContent = title;
   get('description').textContent = description;
@@ -382,6 +435,60 @@ function board(feedback = ''){
   openPanel(mission.place,'Tableau électrique',
     ['Compare les trois départs avec le témoignage.',...notes].join('\n'),[...actions,close],feedback);
 }
+let selectedTool=null;
+function repairBench(step,feedback){
+  openPanel(mission.place,step.label,step.hint,[close],feedback);
+  const bench=get('workbench');
+  const target=get('partTarget');
+  const buttons=Object.entries(tools).map(([id,label])=>{
+    const button=document.createElement('button');
+    button.type='button';
+    button.textContent=label;
+    button.onclick=()=>{
+      selectedTool=id;
+      updateTools();
+    };
+    return [id,button];
+  });
+  function updateTools(){
+    for(const [id,button] of buttons) button.setAttribute('aria-pressed',String(id===selectedTool));
+    get('toolHint').textContent=selectedTool
+      ? tools[selectedTool]+' en main. Actionne la zone du composant.'
+      : 'Choisis un outil dans la mallette.';
+  }
+  function updatePart(){
+    const position=progress.toolUses+1;
+    get('partName').textContent=step.target;
+    get('partProgress').textContent=step.points>1 ? 'Fixation '+position+' / '+step.points : 'Utiliser sur cette zone';
+  }
+  target.dataset.part=step.part;
+  target.onclick=()=>{
+    if(!modal.open || bench.hidden) return;
+    if(selectedTool!==step.tool){
+      get('toolHint').textContent=selectedTool
+        ? 'Cet outil ne convient pas à cette zone. Observe la fixation ou l’interface.'
+        : 'Prends un outil dans la mallette, puis réessaie.';
+      return;
+    }
+    progress.toolUses++;
+    if(progress.toolUses<step.points){
+      updatePart();
+      saveProgress();
+      get('toolHint').textContent='Fixation traitée. Passe à la suivante.';
+      return;
+    }
+    progress.toolUses=0;
+    progress.work++;
+    progress.fixed=progress.work===procedures[missionIndex].work.length;
+    updateObjective();
+    equipment(step.result);
+  };
+  get('toolbox').replaceChildren(...buttons.map(([,button])=>button));
+  bench.hidden=false;
+  updateTools();
+  updatePart();
+  (selectedTool ? target : buttons[0][1]).focus();
+}
 function equipment(feedback = ''){
   const procedure=procedures[missionIndex];
   if(progress.energized){
@@ -398,7 +505,7 @@ function equipment(feedback = ''){
     return;
   }
   if(progress.fixed){
-    openPanel(mission.place,'Réparation terminée','Retourne au tableau pour remettre le circuit en service.',[close]);
+    openPanel(mission.place,'Réparation terminée','Retourne au tableau pour remettre le circuit en service.',[close],feedback);
     return;
   }
   if(!progress.secured){
@@ -407,15 +514,7 @@ function equipment(feedback = ''){
   }
   const notes=[...progress.checks].sort().map(index=>procedure.diagnosis[index][1]);
   if(progress.work>=0){
-    const [label]=procedure.work[progress.work];
-    openPanel(mission.place,'Réparation',feedback || 'Pièce confirmée. Procède à la réparation dans la simulation.',
-      [[label,()=>{
-        const result=procedure.work[progress.work][1];
-        progress.work++;
-        progress.fixed=progress.work===procedure.work.length;
-        updateObjective();
-        equipment(result);
-      },true],close]);
+    repairBench(procedure.work[progress.work],feedback);
     return;
   }
   const actions=procedure.diagnosis.flatMap(([label],index)=>progress.checks.has(index) ? [] : [
@@ -434,6 +533,8 @@ function equipment(feedback = ''){
         return;
       }
       progress.work=0;
+      progress.toolUses=0;
+      selectedTool=null;
       saveProgress();
       equipment();
     }]));
@@ -935,7 +1036,10 @@ function startMission(index,resume=null){
   const work=fixed ? procedure.work.length : checks.size===procedure.diagnosis.length &&
     Number.isInteger(resume?.work) && resume.work>=0 && resume.work<procedure.work.length ? resume.work : -1;
   const energized=fixed && resume?.energized===true;
-  progress={interview,tests,isolated,secured,checks,work,fixed,energized,verified:energized && resume?.verified===true,powered:false};
+  const toolUses=work>=0 && !fixed && Number.isInteger(resume?.toolUses)
+    && resume.toolUses>=0 && resume.toolUses<procedure.work[work].points ? resume.toolUses : 0;
+  progress={interview,tests,isolated,secured,checks,work,toolUses,fixed,energized,verified:energized && resume?.verified===true,powered:false};
+  selectedTool=null;
   poweredAt=undefined;
   keys.clear();
   resetPad();
