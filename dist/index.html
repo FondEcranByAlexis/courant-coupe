@@ -39,6 +39,23 @@ small{display:block;color:#bdbdae;line-height:1.45;margin-top:1rem}
 #compass{position:absolute;bottom:4.4rem;left:50%;transform:translateX(-50%);padding:.28rem .55rem;font-size:.77rem;white-space:nowrap}
 #choices{display:grid;gap:.5rem}
 #choices button{text-align:left}
+#diagnostic{display:grid;gap:.6rem;margin:.65rem 0}
+#meterControls{display:flex;align-items:center;flex-wrap:wrap;gap:.55rem}
+#meterMode[aria-pressed=true]{border-color:var(--yellow);color:var(--yellow)}
+#meterDisplay{padding:.55rem .65rem;border:1px solid #66795f;border-radius:6px;background:#182618;color:#c7e9a6;font-family:monospace;font-size:1rem}
+#circuitRows{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.45rem}
+.circuit-card{display:grid;align-content:start;gap:.4rem;padding:.55rem;background:linear-gradient(#363e38,#252c27);border:1px solid #677369;border-radius:8px}
+.circuit-card strong{font-size:.82rem}
+.circuit-card button{min-height:44px;padding:.35rem;font-size:.79rem;overflow-wrap:anywhere}
+.circuit-light{display:inline-block;width:11px;height:11px;margin-right:.32rem;border-radius:50%;background:#9ed29e;box-shadow:0 0 7px #9ed29e70}
+.circuit-light.trip{background:#ef9663;box-shadow:0 0 7px #ef966370}
+.circuit-card small{margin:0;font-size:.76rem}
+#diagnostic details{border:1px solid #566359;border-radius:6px;padding:.45rem .55rem}
+#diagnostic summary{cursor:pointer;color:#f1d896;font-weight:650}
+#notebook ul{padding-left:1.25rem;margin:.4rem 0}
+#notebook li{margin:.28rem 0}
+#notebook p{margin:.35rem 0}
+@media(max-width:390px) and (orientation:portrait){#circuitRows{grid-template-columns:1fr}}
 #workbench{display:grid;gap:.55rem;margin:.65rem 0}
 #toolbox{display:flex;flex-wrap:wrap;gap:.4rem}
 #toolbox button{font-size:.86rem;padding:.5rem .65rem;min-height:44px}
@@ -174,6 +191,18 @@ dialog .panel{max-height:min(85dvh,46rem)}
     </div>
     <p id="toolHint" aria-live="polite"></p>
   </div>
+  <section id="diagnostic" hidden aria-label="Tableau électrique interactif">
+    <div id="meterControls">
+      <button id="meterMode" type="button" aria-pressed="false">Prendre le voltmètre</button>
+      <output id="meterDisplay" aria-live="polite">— V simulés</output>
+    </div>
+    <div id="circuitRows"></div>
+    <details id="notebook">
+      <summary>Carnet d’intervention</summary>
+      <p id="notebookReport"></p>
+      <ul id="notebookReadings"></ul>
+    </details>
+  </section>
   <div id="choices"></div><p id="message" role="status"></p>
 </section></dialog>
 <script>
@@ -188,11 +217,11 @@ const camera = {x:0, z:2.2, yaw:0, pitch:0};
 const missions = [
   {
     title:'La première fournée', place:'Boulangerie', client:'le boulanger', time:'05 h 42',
-    report:'La vitrine et les lampes marchaient. Dès que j’ai lancé la chauffe du four, tout s’est éteint.',
+    report:'Dès que j’ai lancé la chauffe, le four s’est éteint. La vitrine et les lampes sont restées en service.',
     circuits:['Éclairage','Vitrine','Four'], fault:2, equipment:'Four de cuisson', short:'Four',
     repair:'Remplacer le module de chauffe',
     choices:['Remplacer la minuterie','Remplacer l’écran de commande'],
-    win:'La fournée est sauvée', result:'Le four, la vitrine et les lampes fonctionnent. Le boulanger peut lancer sa première fournée.',
+    win:'La fournée est sauvée', result:'Le four fonctionne à nouveau. Le boulanger peut lancer sa première fournée.',
     colors:['#9d9275','#5d5142','#85745c','#aa6a42']
   },
   {
@@ -380,6 +409,7 @@ function openPanel(category, title, description, actions, feedback = ''){
   resetPad();
   look = null;
   get('workbench').hidden=true;
+  get('diagnostic').hidden=true;
   get('category').textContent = category;
   get('title').textContent = title;
   get('description').textContent = description;
@@ -421,6 +451,84 @@ function client(){
   openPanel(mission.place,mission.client[0].toUpperCase()+mission.client.slice(1),'« '+mission.report+' »',
     [['Reprendre la mission', () => modal.close(), true]]);
 }
+const bakeryReadings=[
+  {volts:230,state:'Enclenché',note:'La protection est enclenchée et le départ répond.'},
+  {volts:231,state:'Enclenché',note:'La protection est enclenchée et la vitrine reste alimentée.'},
+  {volts:0,state:'Déclenché',note:'Le départ a déclenché au lancement de la chauffe. La mesure indique une coupure en sortie.'}
+];
+let meterInHand=false;
+function isolateCircuit(index){
+  if(index!==mission.fault){
+    board('Ce départ alimente un équipement qui fonctionne. Compare les relevés au témoignage.');
+    return;
+  }
+  progress.isolated=true;
+  updateObjective();
+  board();
+}
+function bakeryBoard(feedback){
+  const diagnostic=get('diagnostic');
+  const meter=get('meterMode');
+  const display=get('meterDisplay');
+  const notebook=get('notebook');
+  const complete=progress.tests.size===mission.circuits.length;
+  const actions=complete?mission.circuits.map((circuit,index)=>
+    ['Isoler le circuit '+circuit.toLowerCase(),()=>isolateCircuit(index)]):[];
+  openPanel(mission.place,'Tableau électrique',
+    complete?'Compare les mesures dans le carnet, puis choisis le départ à isoler.'
+      :'Observe les voyants. Prends le voltmètre et touche les points de test de cette simulation.',
+    [...actions,close],feedback);
+  diagnostic.hidden=false;
+  meter.setAttribute('aria-pressed',String(meterInHand));
+  meter.textContent=meterInHand?'Voltmètre en main':'Prendre le voltmètre';
+  if(!meterInHand) display.textContent='— V simulés';
+  meter.onclick=()=>{
+    meterInHand=!meterInHand;
+    bakeryBoard();
+    meter.focus();
+  };
+  const cards=mission.circuits.map((circuit,index)=>{
+    const data=bakeryReadings[index];
+    const card=document.createElement('div');
+    card.className='circuit-card';
+    const title=document.createElement('strong');
+    const state=document.createElement('small');
+    const light=document.createElement('span');
+    const test=document.createElement('button');
+    title.textContent=circuit;
+    light.className=index===mission.fault?'circuit-light trip':'circuit-light';
+    light.setAttribute('aria-hidden','true');
+    state.append(light,document.createTextNode(data.state));
+    test.type='button';
+    test.textContent=progress.tests.has(index)?data.volts+' V simulés':'Point de test';
+    test.setAttribute('aria-label','Mesurer le départ '+circuit.toLowerCase());
+    test.onclick=()=>{
+      if(!meterInHand){
+        get('message').textContent='Prends le voltmètre avant de toucher un point de test.';
+        return;
+      }
+      const wasComplete=progress.tests.size===mission.circuits.length;
+      progress.tests.add(index);
+      saveProgress();
+      display.textContent=circuit+' · '+data.volts+' V simulés';
+      playSound(670,.08,.026,'sine');
+      bakeryBoard();
+      if(!wasComplete && progress.tests.size===mission.circuits.length) notebook.open=true;
+      get('circuitRows').children[index].lastElementChild.focus();
+    };
+    card.append(title,state,test);
+    return card;
+  });
+  get('circuitRows').replaceChildren(...cards);
+  get('notebookReport').textContent='« '+mission.report+' »';
+  const notes=[...progress.tests].sort().map(index=>{
+    const item=document.createElement('li');
+    const data=bakeryReadings[index];
+    item.textContent=mission.circuits[index]+' · '+data.volts+' V simulés. '+data.note;
+    return item;
+  });
+  get('notebookReadings').replaceChildren(...notes);
+}
 function board(feedback = ''){
   const procedure=procedures[missionIndex];
   if(!progress.interview){
@@ -455,6 +563,10 @@ function board(feedback = ''){
       },true],close]);
     return;
   }
+  if(missionIndex===0){
+    bakeryBoard(feedback);
+    return;
+  }
   const readings=mission.circuits.map((circuit,index)=>circuit+' · '+(index===mission.fault
     ? procedure.panel : 'Protection enclenchée. Fonctionnement normal.'));
   const actions=mission.circuits.flatMap((circuit,index)=>progress.tests.has(index) ? [] : [
@@ -465,15 +577,8 @@ function board(feedback = ''){
     }]
   ]);
   if(progress.tests.size===mission.circuits.length){
-    actions.push(...mission.circuits.map((circuit,index)=>['Isoler le circuit '+circuit.toLowerCase(),()=>{
-      if(index!==mission.fault){
-        board('Ce départ alimente un équipement qui fonctionne. Compare les relevés au témoignage.');
-        return;
-      }
-      progress.isolated=true;
-      updateObjective();
-      board();
-    }]));
+    actions.push(...mission.circuits.map((circuit,index)=>
+      ['Isoler le circuit '+circuit.toLowerCase(),()=>isolateCircuit(index)]));
   }
   const notes=[...progress.tests].sort().map(index=>readings[index]);
   openPanel(mission.place,'Tableau électrique',
@@ -964,8 +1069,8 @@ function buildScene(){
 
 
 function sceneLight(now){
-  const ambient=[.08,.045,.22,.55,.55][missionIndex];
-  if(!progress.energized || poweredAt===undefined || missionIndex>=2) return ambient;
+  const ambient=[.65,.045,.22,.55,.55][missionIndex];
+  if(!progress.energized || poweredAt===undefined || missionIndex!==1) return ambient;
   return ambient+(.94-ambient)*Math.min(1,Math.max(0,(now-poweredAt)/780));
 }
 function fixtureLight(object,light){
@@ -1427,6 +1532,9 @@ function startMission(index,resume=null){
     ? resume.fixings.filter(fixing=>Number.isInteger(fixing) && fixing>=0 && fixing<repairStepsForMission[work].count) : []);
   progress={interview,tests,isolated,secured,checks,work,fixings,fixed,energized,verified:energized && resume?.verified===true,powered:false};
   selectedTool=null;
+  meterInHand=false;
+  get('meterDisplay').textContent='— V simulés';
+  get('notebook').open=false;
   poweredAt=undefined;
   eyeHeight=1.61;
   stride=0;
