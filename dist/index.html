@@ -471,19 +471,51 @@ function updateObjective(){
   else if(progress.interview) objective('board','Examine le tableau et compare les relevés.');
   else objective('client',contact[0].toUpperCase()+contact.slice(1)+'.');
 }
-function client(){
-  if(progress.verified){
-    const procedure=procedures[missionIndex];
-    openPanel(mission.place,'Compte rendu',procedure.result,
-      [['Confirmer la remise en service',restore,true],close]);
-    return;
-  }
+const clientProfiles=[
+  {name:'Marc', role:'Boulanger', coat:'#e2ded0', trim:'#a48a70', skin:'#bc855f', hair:'#4a3a31', hat:'baker',
+    question:'Qu’est-ce qui marchait encore après la panne ?',
+    detail:'La vitrine faisait toujours du froid et j’avais de la lumière au comptoir. C’est seulement le four qui s’est arrêté quand j’ai lancé la chauffe.',
+    followup:'J’ai la pâte prête derrière le comptoir. Si le four tient le préchauffage, je peux lancer la fournée.',
+    thanks:'Très bien, je lance la première fournée. Merci d’être venu si tôt.'},
+  {name:'Karim',role:'Gardien du parking',coat:'#3e5059',trim:'#d0b963',skin:'#936148',hair:'#272927',hat:'cap',
+    question:'La barrière et la ventilation répondent encore ?',
+    detail:'Oui. La barrière s’est levée normalement et j’entends encore la ventilation. C’est la rangée de plafonniers qui ne répond plus au passage.',
+    followup:'Préviens-moi après ton essai. Je veux vérifier que la lumière tient le temps de traverser l’allée.',
+    thanks:'Je vois toute l’allée depuis le poste. Je peux la rouvrir.'},
+  {name:'Léa',role:'Régisseuse',coat:'#333844',trim:'#b6a4a8',skin:'#c88c76',hair:'#623a32',hat:'headset',
+    question:'La coupure a eu lieu sur quel effet ?',
+    detail:'Au premier effet de la scène. La console a envoyé la commande et le son était toujours là. Les balises, elles, sont restées allumées.',
+    followup:'Quand tu auras remis le rack en service, relance le premier effet. Je surveillerai la scène.',
+    thanks:'Je vois les projecteurs suivre la séquence. Je donne le feu vert à l’équipe.'},
+  {name:'Nadia',role:'Responsable de l’entrepôt',coat:'#577783',trim:'#c2cfd2',skin:'#9f6d52',hair:'#382e2e',hat:'beanie',
+    question:'Tu as remarqué quelque chose avant l’alarme ?',
+    detail:'Le bruit du ventilateur a disparu juste avant l’alarme. Les portes étaient fermées et les lampes étaient encore allumées.',
+    followup:'J’ai gardé les portes fermées. Vérifie que la température recommence à descendre après le redémarrage.',
+    thanks:'Je vois la température baisser. Je garde un œil sur le relevé de la chambre.'},
+  {name:'Julien',role:'Chef de gare',coat:'#354455',trim:'#b5a276',skin:'#c28d72',hair:'#514239',hat:'cap',
+    question:'Les voyageurs entendent encore les annonces ?',
+    detail:'Oui. J’ai annoncé le quai au micro. Seuls les écrans sont figés, et ils affichent encore l’ancien départ.',
+    followup:'Fais un essai depuis la baie. Je veux voir le même quai s’afficher sur tous les écrans.',
+    thanks:'Le bon quai s’affiche partout. Je peux orienter les voyageurs vers le dernier train.'}
+];
+let clientTalkingUntil=0;
+function client(topic='arrival'){
+  const profile=clientProfiles[missionIndex];
   if(!progress.interview){
     progress.interview=true;
     updateObjective();
   }
-  openPanel(mission.place,mission.client[0].toUpperCase()+mission.client.slice(1),'« '+mission.report+' »',
-    [['Reprendre la mission', () => modal.close(), true]]);
+  clientTalkingUntil=frameTime+2600;
+  const title=profile.name+' · '+profile.role;
+  if(progress.verified){
+    openPanel(mission.place,title,procedures[missionIndex].result+'\n\n« '+profile.thanks+' »',
+      [['Confirmer la remise en service',restore,true],close]);
+    return;
+  }
+  const text=topic==='detail' ? profile.detail : progress.isolated || progress.energized ? profile.followup : mission.report;
+  const actions=topic==='detail' ? [] : [[profile.question,()=>client('detail')]];
+  actions.push(['Reprendre la mission',()=>modal.close(),true]);
+  openPanel(mission.place,title,'« '+text+' »',actions);
 }
 let meterInHand=false;
 let selectedProbe=null;
@@ -1040,11 +1072,6 @@ function createBakery(){
   box(0,.52,1.02,2.45,1.04,.65,'#814c30',{solid:true});
   box(0,1.07,1.02,2.57,.12,.77,'#aa6a42');
   box(-.77,1.2,1,.34,.22,.29,'#443a30');
-  box(0,.79,.35,.38,.42,.28,'#443b36',{solid:true});
-  box(0,1.18,.35,.49,.48,.28,'#c1b19a');
-  box(0,1.56,.35,.24,.25,.23,'#be8668');
-  box(0,1.71,.35,.27,.08,.26,'#e0d3b9');
-  for(let x of [-.31,.31]) box(x,1.17,.35,.13,.4,.15,'#b5a48a');
   box(3.15,.49,1,1.14,.98,2.1,'#5a3826',{solid:true});
   box(3.15,1.03,1,1.2,.09,2.17,'#a57d54');
   for(let z of [.3,.77,1.24,1.71]){
@@ -1077,8 +1104,6 @@ function createVenue(){
   for(const z of [-2.7,0,2.7]) box(0,2.98,z,1.7,.09,.26,'#fff0bb',{glow:true});
   box(0,.5,1.02,2.1,1,.62,accent,{solid:true});
   box(0,1.02,1.02,2.19,.08,.69,wall);
-  box(0,1.18,.35,.49,.58,.3,'#354047',{solid:true});
-  box(0,1.58,.35,.24,.25,.23,'#be8668');
   box(-3.8,1.54,-2.45,.27,.81,1.02,'#56615a');
   for(const z of [-2.74,-2.45,-2.16]) box(-3.64,1.55,z,.05,.24,.15,'#d9d7c2');
   box(2.2,.92,-3.93,1.48,1.84,1.05,'#343a3c',{solid:true});
@@ -1125,9 +1150,6 @@ function addSceneDetails(){
   box(-3.75,2.24,-2.45,.08,.65,.09,'#8f9387');
   box(-3.69,1.8,-2.45,.046,.10,.42,'#d9bd68');
   for(const z of [-2.74,-2.45,-2.16]) box(-3.609,1.39,z,.034,.028,.055,'#acc494');
-  box(.054,1.58,.48,.027,.017,.012,'#33302e');
-  box(-.054,1.58,.48,.027,.017,.012,'#33302e');
-  box(0,1.24,.502,.26,.16,.019,accent);
   box(2.2,1.48,-3.345,.34,.09,.02,'#202823');
   for(const x of [2.11,2.2,2.29]) box(x,1.48,-3.328,.038,.027,.012,'#a7dba0',{glow:true,signal:true});
 
@@ -1193,12 +1215,106 @@ function addSceneDetails(){
     box(.95,.019,3.45,5.0,.016,.11,'#bd9a50');
   }
 }
+const clientParts=[];
+let clientHeading=0;
+function buildClient(){
+  const profile=clientProfiles[missionIndex];
+  const {coat,trim,skin,hair,hat}=profile;
+  const {x,z}=targets[0];
+  clientParts.length=0;
+  clientHeading=0;
+  clientTalkingUntil=0;
+  colliders.push({x,z,w:.48,d:.31});
+  function part(group,x,y,z,w,h,d,color){
+    box(0,y,0,w,h,d,color);
+    const mesh=boxes.at(-1);
+    mesh.rotation=[1,0];
+    clientParts.push({mesh,group,x,y,z});
+  }
+  const body=(...args)=>part('body',...args);
+  const head=(...args)=>part('head',...args);
+  for(const side of [-1,1]){
+    body(side*.115,.39,0,.175,.69,.21,'#343638');
+    body(side*.115,.085,.065,.184,.13,.33,'#222626');
+    part(side<0?'left':'right',side*.269,1.17,0,.128,.34,.16,coat);
+    part(side<0?'left':'right',side*.281,.94,.042,.105,.20,.13,coat);
+    part(side<0?'left':'right',side*.281,.818,.063,.089,.111,.104,skin);
+  }
+  body(0,.76,0,.37,.2,.24,'#3b3d3d');
+  body(0,1.095,0,.38,.51,.24,coat);
+  body(0,1.31,-.006,.475,.19,.25,coat);
+  body(0,1.42,0,.112,.15,.12,skin);
+  if(hat==='baker'){
+    body(0,.99,.128,.30,.53,.024,trim);
+    body(0,1.07,.144,.14,.13,.014,'#c6ae92');
+    for(const side of [-1,1]) body(side*.075,1.23,.132,.028,.26,.013,trim);
+  }else{
+    body(0,1.09,.127,.018,.44,.013,trim);
+    body(-.106,1.22,.137,.102,.048,.014,trim);
+    if(missionIndex===1 || missionIndex===3){
+      body(0,1.023,.127,.375,.044,.015,trim);
+      body(0,1.023,-.127,.375,.044,.015,trim);
+    }
+  }
+  head(0,1.565,0,.219,.247,.192,skin);
+  head(0,1.469,.036,.168,.072,.158,skin);
+  head(0,1.61,-.071,.226,.197,.079,hair);
+  head(0,1.655,-.003,.23,.09,.21,hair);
+  for(const side of [-1,1]){
+    head(side*.116,1.548,0,.04,.073,.065,skin);
+    head(side*.052,1.593,.098,.054,.015,.009,hair);
+    head(side*.051,1.567,.098,.042,.02,.012,'#e8d9c9');
+    part('pupil',side*.05,1.568,.106,.018,.019,.009,'#393130');
+  }
+  head(0,1.532,.105,.045,.066,.039,skin);
+  part('mouth',0,1.487,.116,.069,.012,.012,'#6b4038');
+  if(hat==='baker'){
+    head(0,1.694,0,.249,.052,.22,'#c8c6bb');
+    head(0,1.748,0,.275,.095,.242,'#ece8dd');
+  }else if(hat==='headset'){
+    head(0,1.699,-.012,.25,.032,.15,'#25282e');
+    head(-.127,1.564,-.012,.055,.102,.095,'#2c3037');
+    head(-.107,1.52,.078,.02,.021,.161,'#313741');
+    head(-.075,1.51,.15,.051,.028,.035,'#30343a');
+  }else{
+    head(0,1.674,0,.25,.085,.224,coat);
+    if(hat==='cap') head(0,1.647,.123,.232,.027,.153,'#252a2b');
+  }
+  animateClient(0,0);
+}
+function animateClient(now,delta){
+  const {x,z}=targets[0];
+  const dx=camera.x-x,dz=camera.z-z;
+  const near=Math.hypot(dx,dz)<2.8;
+  const desired=near?Math.atan2(dx,dz):0;
+  const error=desired-clientHeading;
+  clientHeading+=Math.atan2(Math.sin(error),Math.cos(error))*Math.min(1,delta*4);
+  const still=reducedMotion.matches;
+  const talking=!still && modal.open && now<clientTalkingUntil
+    && get('title').textContent.startsWith(clientProfiles[missionIndex].name+' · ');
+  const c=Math.cos(clientHeading),sin=Math.sin(clientHeading);
+  const breathe=still?0:Math.sin(now*.003)*.009;
+  const gesture=talking?Math.sin(now*.012)*.045:0;
+  for(const item of clientParts){
+    const {mesh,group}=item;
+    const arm=group==='left' || group==='right';
+    const localZ=item.z+(arm?gesture*(group==='left'?.55:1):0);
+    mesh.x=x+item.x*c+localZ*sin;
+    mesh.z=z-item.x*sin+localZ*c;
+    mesh.y=item.y+(item.y>.8?breathe:0)+(arm?Math.abs(gesture)*1.2:0);
+    mesh.rotation[0]=c;
+    mesh.rotation[1]=sin;
+    if(group==='pupil') mesh.h=!still && now%4200>4080?.003:.019;
+    if(group==='mouth') mesh.h=talking?.012+.015*Math.abs(Math.sin(now*.025)):.012;
+  }
+}
 function buildScene(){
   boxes.length=0;
   colliders.length=0;
   if(missionIndex===0) createBakery();
   else createVenue();
   addSceneDetails();
+  buildClient();
   for(const object of boxes){
     object.rgb=object.color.slice(1).match(/../g).map(pair=>parseInt(pair,16)/255);
   }
@@ -1229,11 +1345,13 @@ function setupGraphics(){
     attribute vec3 aVertex;
     attribute float aShade;
     uniform vec3 uPosition, uSize, uCamera;
-    uniform vec2 uYaw, uPitch, uProjection;
+    uniform vec2 uYaw, uPitch, uProjection, uObjectRotation;
     varying mediump float vShade, vDepth;
     varying mediump vec3 vWorld;
     void main(){
-      vWorld=aVertex*uSize+uPosition;
+      vec3 local=aVertex*uSize;
+      vWorld=vec3(local.x*uObjectRotation.x+local.z*uObjectRotation.y,local.y,
+        local.z*uObjectRotation.x-local.x*uObjectRotation.y)+uPosition;
       vec3 p = vWorld-uCamera;
       float x = p.x*uYaw.x+p.z*uYaw.y;
       float front = p.x*uYaw.y-p.z*uYaw.x;
@@ -1278,9 +1396,10 @@ function setupGraphics(){
   gl.vertexAttribPointer(point,3,gl.FLOAT,false,16,0);
   gl.vertexAttribPointer(shade,1,gl.FLOAT,false,16,12);
   gl.enable(gl.DEPTH_TEST);
-  locations = Object.fromEntries(['Position','Size','Camera','Yaw','Pitch','Projection','Color','Light','Glow']
+  locations = Object.fromEntries(['Position','Size','Camera','Yaw','Pitch','Projection','Color','Light','Glow','ObjectRotation']
     .map(name => [name,gl.getUniformLocation(program,'u'+name)]));
 }
+const identityRotation=[1,0];
 function renderWebGL(now){
   const scale = Math.min(window.devicePixelRatio || 1, 1.65);
   const width = Math.round(canvas.clientWidth*scale);
@@ -1302,6 +1421,8 @@ function renderWebGL(now){
   gl.uniform2f(locations.Projection,focal*height/width,focal);
   gl.uniform1f(locations.Light,light);
   for(const object of boxes){
+    const [c,s]=object.rotation || identityRotation;
+    gl.uniform2f(locations.ObjectRotation,c,s);
     gl.uniform3f(locations.Position,object.x,object.y,object.z);
     gl.uniform3f(locations.Size,object.w,object.h,object.d);
     gl.uniform3fv(locations.Color,object.rgb);
@@ -1343,10 +1464,12 @@ function renderCanvas(now){
   const light=sceneLight(now);
   const surfaces=[];
   for(const object of boxes){
+    const [c,s]=object.rotation || identityRotation;
     const vertices=corners.map(([vx,vy,vz])=>{
-      const x=object.x+vx*object.w/2-camera.x;
+      const localX=vx*object.w/2,localZ=vz*object.d/2;
+      const x=object.x+localX*c+localZ*s-camera.x;
       const y=object.y+vy*object.h/2-eyeHeight;
-      const z=object.z+vz*object.d/2-camera.z;
+      const z=object.z-localX*s+localZ*c-camera.z;
       const front=x*sy-z*cy;
       return [x*cy+z*sy,y*cp-front*sp,y*sp+front*cp];
     });
@@ -1431,6 +1554,7 @@ function frame(now){
   frameTime=now;
   if(progress.energized && poweredAt===undefined) poweredAt=now;
   if(started && !modal.open && !rotationBlocked){move(delta);updateHud();}
+  animateClient(now,delta);
   if(gl) renderWebGL(now);
   else renderCanvas(now);
   requestAnimationFrame(frame);
