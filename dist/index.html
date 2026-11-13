@@ -65,9 +65,25 @@ small{display:block;color:#bdbdae;line-height:1.45;margin-top:1rem}
 .test-pair button{flex:1;border-radius:50px;background:#202522}
 .test-pair button[data-probe=black]{box-shadow:inset 0 0 0 2px #aeb9af;background:#121514}
 .test-pair button[data-probe=red]{box-shadow:inset 0 0 0 2px #ed8e7c;background:#713b36}
-#diagnostic .breaker-lever{touch-action:none;border:1px solid #8e9b92;background:linear-gradient(#808d82 0 32%,#222923 34% 65%,#4b5650 67%);color:white}
-#diagnostic .breaker-lever:disabled{opacity:.55}
-#diagnostic .breaker-lever[data-pulled=true]{background:linear-gradient(#555e58 0 44%,#202521 46% 73%,#8b988e 75%)}
+#circuitRows{gap:.22rem;padding:.7rem .5rem;background:linear-gradient(#2c332e 12%,#151a17 12% 36%,#8e9791 36% 57%,#202622 57%);border:4px solid #4c5550;border-radius:8px;box-shadow:inset 0 3px 10px #0009}
+.circuit-card{gap:.35rem;padding:.42rem;background:linear-gradient(135deg,#eeede4,#d8dacf);color:#202621;border:1px solid #a7aca1;border-radius:3px;box-shadow:0 3px 4px #0009,inset 0 1px #fff}
+.circuit-card strong{background:#f7f4e7;padding:.2rem .25rem;border:1px solid #b4b6a8;border-radius:2px;color:#202621}
+.circuit-card small{color:#29352c;font-weight:650}
+#diagnostic .breaker-lever{--travel:var(--rest,0%);position:relative;min-height:72px;padding:0;touch-action:none;background:linear-gradient(90deg,#b6bab0,#dadbd2 20% 80%,#acb1a7);border:1px solid #92988d;border-radius:3px;box-shadow:inset 0 1px 3px #343b3655}
+#diagnostic .breaker-lever:disabled{opacity:1;cursor:default}
+.breaker-lever[data-state=on]{--rest:0%}
+.breaker-lever[data-state=trip]{--rest:30%}
+.breaker-lever[data-state=off]{--rest:60%}
+.breaker-lever::before,.breaker-lever::after{position:absolute;left:7%;font:700 .68rem monospace;color:#333c34}
+.breaker-lever::before{content:'I';top:11%}
+.breaker-lever::after{content:'O';bottom:10%}
+.breaker-slot{position:absolute;inset:8% 22%;background:#1a201c;border-radius:3px;box-shadow:inset 0 3px 5px #000b;pointer-events:none}
+.breaker-thumb{position:absolute;left:9%;right:9%;height:40%;top:var(--travel);border-radius:3px;background:linear-gradient(#69736c,#333b36 23%,#181e1a 78%);border:1px solid #101511;box-shadow:0 3px 4px #0009,inset 0 2px #a0a79e77;transition:top .16s ease-out}
+.breaker-thumb::after{content:'';position:absolute;inset:37% 16%;background:repeating-linear-gradient(#939b91 0 1px,#343c36 1px 3px)}
+.breaker-lever[data-dragging=true] .breaker-thumb{transition:none}
+.circuit-light.off{background:#788278;box-shadow:none}
+#diagnostic .test-pair{padding:.15rem .1rem;background:#414a43;border-radius:4px}
+@media(prefers-reduced-motion:reduce){.breaker-thumb{transition:none}}
 #workbench{display:grid;gap:.55rem;margin:.65rem 0}
 #toolbox{display:flex;flex-wrap:wrap;gap:.4rem}
 #toolbox button{font-size:.86rem;padding:.5rem .65rem;min-height:44px}
@@ -495,17 +511,29 @@ function isolateCircuit(index){
   board();
 }
 function bakeryBoard(feedback){
+  const phase=progress.energized?'running':progress.fixed?'restore':progress.isolated?'isolated':'diagnose';
   const diagnostic=get('diagnostic');
   const meter=get('meterMode');
   const display=get('meterDisplay');
   const notebook=get('notebook');
   const complete=progress.tests.size===mission.circuits.length;
-  openPanel(mission.place,'Tableau électrique',
-    complete?'Range le voltmètre, puis fais glisser vers le bas la manette du départ à isoler.'
+  const prompts={
+    diagnose:complete?'Range le voltmètre, puis abaisse la manette du départ à isoler.'
       :'Sur le banc de test simulé, place les deux pointes sur les deux contacts du même départ.',
-    [close],feedback);
+    isolated:progress.secured?'Le départ du four est à l’arrêt et sécurisé dans la simulation.'
+      :'La manette du four est à l’arrêt. Confirme la mise en sécurité simulée.',
+    restore:'Le four est réparé. Remonte sa manette de O vers I, puis retourne au four pour l’essai.',
+    running:'Le départ du four est en marche. Consulte ton objectif pour terminer l’intervention.'
+  };
+  const actions=phase==='isolated' && !progress.secured ? [['Consigner et vérifier la mise hors tension',()=>{
+    progress.secured=true;
+    updateObjective();
+    board();
+  },true],close] : [close];
+  openPanel(mission.place,'Tableau électrique',prompts[phase],actions,feedback);
   diagnostic.hidden=false;
-  get('probeTray').hidden=!meterInHand;
+  get('meterControls').hidden=phase!=='diagnose';
+  get('probeTray').hidden=phase!=='diagnose' || !meterInHand;
   meter.setAttribute('aria-pressed',String(meterInHand));
   meter.textContent=meterInHand?'Ranger le voltmètre':'Prendre le voltmètre';
   if(!meterInHand) display.textContent='— V simulés';
@@ -579,36 +607,68 @@ function bakeryBoard(feedback){
   }
   updateProbes();
   const cards=mission.circuits.map((circuit,index)=>{
-    const data=bakeryReadings[index];
+    const isOven=index===mission.fault;
+    const position=!isOven || phase==='running'?'on':phase==='diagnose'?'trip':'off';
+    const positionLabel={on:'I · Marche',trip:'Déclenché',off:'O · Arrêt'}[position];
     const card=document.createElement('div');
     card.className='circuit-card';
     const title=document.createElement('strong');
     const state=document.createElement('small');
     const light=document.createElement('span');
     title.textContent=circuit;
-    light.className=index===mission.fault?'circuit-light trip':'circuit-light';
+    light.className='circuit-light '+position;
     light.setAttribute('aria-hidden','true');
-    state.append(light,document.createTextNode(data.state));
+    state.append(light,document.createTextNode(positionLabel));
     const lever=document.createElement('button');
     lever.className='breaker-lever';
+    lever.dataset.state=position;
     lever.type='button';
-    lever.textContent='Manette';
-    lever.setAttribute('aria-label','Abaisser la manette du départ '+circuit.toLowerCase());
-    lever.disabled=!complete || meterInHand;
+    const slot=document.createElement('span');
+    const thumb=document.createElement('span');
+    slot.className='breaker-slot';
+    thumb.className='breaker-thumb';
+    slot.setAttribute('aria-hidden','true');
+    slot.appendChild(thumb);
+    lever.appendChild(slot);
+    const raising=phase==='restore' && isOven;
+    const rest={on:0,trip:50,off:100}[position];
+    lever.setAttribute('aria-label',circuit+' · '+positionLabel+' · '+(raising?'Remonter la manette':'Abaisser la manette'));
+    lever.disabled=!raising && (phase!=='diagnose' || !complete || meterInHand);
     let startY=0;
+    function resetLever(){
+      lever.dataset.dragging='false';
+      lever.style.setProperty('--travel',(rest*.6)+'%');
+    }
+    function toggleLever(){
+      if(raising) energizeCircuit();
+      else{
+        if(isOven) playSound(138,.09,.048,'triangle');
+        isolateCircuit(index);
+      }
+    }
     bindGesture(lever,{
-      start:event=>{startY=event.clientY;return true;},
-      move:event=>{lever.dataset.pulled=String(event.clientY-startY>12);},
-      end:event=>{
-        lever.dataset.pulled='false';
-        if(event.clientY-startY>=22) isolateCircuit(index);
-        else get('message').textContent='Maintiens la manette et fais-la glisser vers le bas.';
+      start:event=>{
+        startY=event.clientY;
+        lever.dataset.dragging='true';
+        return true;
       },
-      cancel:()=>{lever.dataset.pulled='false';},
-      keyboard:()=>isolateCircuit(index)
+      move:event=>{
+        const distance=event.clientY-startY;
+        const value=Math.min(100,Math.max(0,rest+distance*3));
+        lever.style.setProperty('--travel',(value*.6)+'%');
+      },
+      end:event=>{
+        resetLever();
+        const distance=(event.clientY-startY)*(raising?-1:1);
+        if(distance>=22) toggleLever();
+        else get('message').textContent=raising?'Fais glisser la manette vers le haut.':'Fais glisser la manette vers le bas.';
+      },
+      cancel:resetLever,
+      keyboard:toggleLever
     });
     const pair=document.createElement('div');
     pair.className='test-pair';
+    pair.hidden=phase!=='diagnose';
     for(const point of [0,1]){
       const contact=document.createElement('button');
       contact.type='button';
@@ -641,10 +701,21 @@ function bakeryBoard(feedback){
   });
   get('notebookReadings').replaceChildren(...notes);
 }
+function energizeCircuit(){
+  progress.energized=true;
+  updateAmbience();
+  playSound(95,.18,.075,'triangle');
+  updateObjective();
+  modal.close();
+}
 function board(feedback = ''){
   const procedure=procedures[missionIndex];
   if(!progress.interview){
     openPanel(mission.place,'Tableau électrique','Interroge la personne sur place avant de commencer le diagnostic.',[close]);
+    return;
+  }
+  if(missionIndex===0){
+    bakeryBoard(feedback);
     return;
   }
   if(progress.energized){
@@ -653,13 +724,7 @@ function board(feedback = ''){
   }
   if(progress.fixed){
     openPanel(mission.place,'Remise en service','L’équipement est refermé. Remets le circuit en service pour passer à l’essai.',
-      [['Remettre le circuit en service',()=>{
-        progress.energized=true;
-        updateAmbience();
-        playSound(95,.18,.075,'triangle');
-        updateObjective();
-        modal.close();
-      },true],close]);
+      [['Remettre le circuit en service',energizeCircuit,true],close]);
     return;
   }
   if(progress.isolated){
@@ -667,18 +732,12 @@ function board(feedback = ''){
       openPanel(mission.place,'Circuit sécurisé','La mise hors tension est confirmée dans la simulation.',[close]);
       return;
     }
-    openPanel(mission.place,'Mise en sécurité',missionIndex===0
-      ? 'Manette du four abaissée. Confirme la mise en sécurité simulée avant d’ouvrir le four.'
-      : 'Le circuit est isolé. Le contrôle de sécurité est simulé avant toute intervention.',
+    openPanel(mission.place,'Mise en sécurité','Le circuit est isolé. Le contrôle de sécurité est simulé avant toute intervention.',
       [['Consigner et vérifier la mise hors tension',()=>{
         progress.secured=true;
         updateObjective();
         board();
       },true],close]);
-    return;
-  }
-  if(missionIndex===0){
-    bakeryBoard(feedback);
     return;
   }
   const readings=mission.circuits.map((circuit,index)=>circuit+' · '+(index===mission.fault
