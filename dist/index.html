@@ -44,6 +44,10 @@ dialog::backdrop{background:#080c09b8}
 dialog .panel{max-height:min(85dvh,46rem)}
 @media(pointer:coarse){#stick{display:block}#action{left:auto;right:.8rem;transform:none;max-width:calc(100vw - 108px);overflow:hidden;text-overflow:ellipsis}#compass{bottom:5.6rem}}
 #intro .panel{width:min(100%,58rem)}
+#homeActions{display:flex;flex-wrap:wrap;gap:.6rem;margin:1.2rem 0 .5rem}
+#homeStatus{margin:.5rem 0 0}
+.mission-card:disabled{opacity:.65;cursor:default}
+.mission-card:disabled:hover{border-color:var(--border)}
 #missionList{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.6rem;margin-top:1.15rem}
 .mission-card{text-align:left;display:grid;align-content:start;gap:.3rem;min-height:5rem}
 .mission-card span{font-size:.78rem;color:#d1c7ae}
@@ -78,7 +82,7 @@ dialog .panel{max-height:min(85dvh,46rem)}
 <body>
 <canvas id="view" aria-label="Lieu de la mission en 3D"></canvas>
 <div id="hud" hidden>
-  <div id="top"><div id="brief"><div class="brand" id="missionName"></div><strong id="goal"></strong></div><div id="toolbar"><button id="missionsButton">Missions</button><button id="help" aria-label="Afficher les commandes">?</button></div></div>
+  <div id="top"><div id="brief"><div class="brand" id="missionName"></div><strong id="goal"></strong></div><div id="toolbar"><button id="missionsButton">Accueil</button><button id="help" aria-label="Afficher les commandes">?</button></div></div>
   <span id="cross"></span><div id="compass"></div>
   <div id="stick" aria-label="Joystick de déplacement"><div id="thumb"></div></div>
   <button id="action" disabled>Interagir</button>
@@ -87,8 +91,17 @@ dialog .panel{max-height:min(85dvh,46rem)}
   <section class="panel">
     <div class="brand">FBA Games</div>
     <h1>Courant Coupé</h1>
-    <p>Choisis une intervention.</p>
-    <div id="missionList"></div>
+    <div id="home">
+      <div id="homeActions">
+        <button id="playButton" class="primary">Jouer</button>
+        <button id="continueButton" disabled>Continuer à jouer</button>
+      </div>
+      <p id="homeStatus"></p>
+    </div>
+    <section id="missionPicker" hidden aria-label="Choix des missions">
+      <button id="backHome">Retour à l’accueil</button>
+      <div id="missionList"></div>
+    </section>
     <small>Sur téléphone, joue en mode paysage.</small>
     <p id="graphicsError" role="alert" hidden>Le rendu 3D est indisponible dans ce navigateur. Essaie un autre navigateur.</p>
   </section>
@@ -174,11 +187,35 @@ let missionIndex=0;
 let mission=missions[0];
 let progress;
 let successTimer;
-let completed=new Set();
+const saveKey='courant-coupe-save';
+let savedGame={completed:[],checkpoint:null};
 try{
-  const saved=JSON.parse(localStorage.getItem('courant-coupe-missions') || '[]');
-  if(Array.isArray(saved)) completed=new Set(saved.filter(index=>Number.isInteger(index) && index>=0 && index<missions.length));
+  const current=JSON.parse(localStorage.getItem(saveKey) || 'null');
+  if(current && Array.isArray(current.completed)) savedGame=current;
+  else{
+    const legacy=JSON.parse(localStorage.getItem('courant-coupe-missions') || '[]');
+    if(Array.isArray(legacy)) savedGame.completed=legacy;
+  }
 }catch{}
+const validIndex=index=>Number.isInteger(index) && index>=0 && index<missions.length;
+const completed=new Set(savedGame.completed.filter(validIndex));
+let checkpoint=savedGame.checkpoint;
+function unlocked(index){
+  return validIndex(index) && index<=Math.max(-1,...completed)+1;
+}
+if(!checkpoint || !unlocked(checkpoint.index)) checkpoint=null;
+function saveProgress(){
+  if(!started) return;
+  checkpoint=progress.powered ? null : {
+    index:missionIndex,
+    camera:{...camera},
+    interview:progress.interview,
+    tests:[...progress.tests],
+    isolated:progress.isolated,
+    fixed:progress.fixed
+  };
+  try{localStorage.setItem(saveKey,JSON.stringify({completed:[...completed],checkpoint}));}catch{}
+}
 let started = false;
 let activeTarget;
 let stage = 'client';
@@ -189,6 +226,7 @@ let frameTime = 0;
 function objective(id, instruction){
   stage = id;
   get('goal').textContent = instruction;
+  saveProgress();
 }
 function openPanel(category, title, description, actions, feedback = ''){
   keys.clear();
@@ -238,6 +276,7 @@ function board(feedback = ''){
     progress.tests.has(index) ? circuit+' · relevé effectué' : 'Relever le circuit '+circuit.toLowerCase(),
     ()=>{
       progress.tests.add(index);
+      saveProgress();
       board(circuit+' · '+(index===mission.fault ? mission.reading : 'Aucun défaut détecté.'));
     }
   ]);
@@ -279,13 +318,12 @@ function restore(){
   if(progress.powered) return;
   progress.powered=true;
   completed.add(missionIndex);
-  try{localStorage.setItem('courant-coupe-missions',JSON.stringify([...completed]));}catch{}
   objective(null,'Circuit rétabli · mission réussie');
   modal.close();
   successTimer=setTimeout(()=>{
     const actions=[
       ['Rejouer la mission',()=>startMission(missionIndex)],
-      ['Choisir une mission',showMenu],
+      ['Choisir une mission',()=>showMenu(true)],
       close
     ];
     if(missionIndex+1<missions.length){
@@ -674,6 +712,7 @@ window.addEventListener('blur',()=>{keys.clear();resetPad();look=null;});
 get('action').onclick=interact;
 get('help').onclick=()=>openPanel('Commandes','Se déplacer et interagir',
   'Clavier · ZQSD ou WASD pour marcher, flèches gauche/droite ou glissement à la souris pour tourner, E pour interagir. Tactile · joystick pour marcher, glissement dans la scène pour regarder, bouton d’action pour interagir. Suis la flèche pour trouver ton prochain objectif.',[close]);
+let graphicsReady=Boolean(gl || flat);
 let rotationBlocked=false;
 let reopenPanel=false;
 const portraitTouch=matchMedia('(orientation: portrait) and (pointer: coarse)');
@@ -714,10 +753,11 @@ function renderMissionList(){
     const place=document.createElement('span');
     const title=document.createElement('strong');
     button.className='mission-card';
-    place.textContent=item.place+(completed.has(index)?' · réussie':'');
+    const status=completed.has(index) ? 'Réussie' : unlocked(index) ? 'Disponible' : '🔒 Verrouillée';
+    place.textContent=item.place+' · '+status;
     title.textContent=item.title;
     button.append(title,place);
-    button.disabled=!gl && !flat;
+    button.disabled=!graphicsReady || !unlocked(index);
     button.onclick=()=>{
       startMission(index);
       void requestLandscape();
@@ -725,22 +765,42 @@ function renderMissionList(){
     return button;
   }));
 }
-function showMenu(){
+function nextUnfinished(){
+  return missions.findIndex((_,index)=>unlocked(index) && !completed.has(index));
+}
+function updateHome(){
+  const resumeIndex=checkpoint?.index ?? nextUnfinished();
+  get('playButton').disabled=!graphicsReady;
+  get('continueButton').disabled=!graphicsReady || resumeIndex<0 || (!checkpoint && !completed.size);
+  get('homeStatus').textContent=checkpoint ? 'Mission en cours · '+missions[checkpoint.index].title
+    : completed.size ? completed.size+' / '+missions.length+' missions réussies' : '';
+}
+function showMenu(picker=false){
+  saveProgress();
   clearTimeout(successTimer);
   started=false;
   reopenPanel=false;
   if(modal.open) modal.close();
   get('intro').hidden=false;
-  renderMissionList();
+  get('home').hidden=picker;
+  get('missionPicker').hidden=!picker;
+  if(picker) renderMissionList();
+  else updateHome();
   updateOrientation();
+  if(!picker) get('playButton').focus();
 }
-function startMission(index){
+function startMission(index,resume=null){
+  if(!graphicsReady || !unlocked(index)) return;
   clearTimeout(successTimer);
   if(modal.open) modal.close();
   reopenPanel=false;
   missionIndex=index;
   mission=missions[index];
-  progress={interview:false,tests:new Set(),isolated:false,fixed:false,powered:false};
+  const interview=resume?.interview===true;
+  const tests=new Set(interview && Array.isArray(resume?.tests)
+    ? resume.tests.filter(test=>Number.isInteger(test) && test>=0 && test<mission.circuits.length) : []);
+  const isolated=tests.size===mission.circuits.length && resume?.isolated===true;
+  progress={interview,tests,isolated,fixed:isolated && resume?.fixed===true,powered:false};
   poweredAt=undefined;
   keys.clear();
   resetPad();
@@ -750,16 +810,34 @@ function startMission(index){
   Object.assign(targets[0],{name:'Parler '+contact,short:mission.client});
   Object.assign(targets[2],{name:'Examiner · '+mission.short,short:mission.short});
   buildScene();
+  const position=resume?.camera;
+  if(position && [position.x,position.z,position.yaw,position.pitch].every(Number.isFinite)
+    && clearSpace(position.x,position.z) && Math.abs(position.pitch)<=.75){
+    Object.assign(camera,position);
+  }
   started=true;
   get('intro').hidden=true;
   get('missionName').textContent='Mission '+String(index+1).padStart(2,'0')+' · '+mission.time;
-  objective('client','Va parler '+contact+'.');
+  if(progress.fixed) objective('board','Retourne au tableau pour remettre le circuit en service.');
+  else if(progress.isolated) objective('equipment','Interviens sur l’équipement indiqué.');
+  else if(progress.interview) objective('board','Examine le tableau et compare les relevés.');
+  else objective('client','Va parler '+contact+'.');
   updateHud();
   updateOrientation();
 }
-get('missionsButton').onclick=showMenu;
+get('missionsButton').onclick=()=>showMenu();
+get('playButton').onclick=()=>showMenu(true);
+get('backHome').onclick=()=>showMenu();
+get('continueButton').onclick=()=>{
+  startMission(checkpoint?.index ?? nextUnfinished(),checkpoint);
+  void requestLandscape();
+};
+window.addEventListener('pagehide',saveProgress);
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='hidden') saveProgress();
+});
 progress={powered:false};
-renderMissionList();
+updateHome();
 buildScene();
 try{
   if(!gl && !flat) throw new Error('Canvas indisponible');
@@ -768,7 +846,8 @@ try{
 }catch(error){
   console.error(error);
   get('graphicsError').hidden=false;
-  for(const button of get('missionList').children) button.disabled=true;
+  graphicsReady=false;
+  updateHome();
 }
 </script>
 </body>
