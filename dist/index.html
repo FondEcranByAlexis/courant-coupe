@@ -50,6 +50,7 @@ small{display:block;color:#bdbdae;line-height:1.45;margin-top:1rem}
 #cover.cover-open{inset:9% 4%;width:15%;background:#48514b;box-shadow:3px 0 10px #1118;writing-mode:vertical-rl;animation:open-cover .25s ease-out}
 @keyframes open-cover{from{width:72%;left:14%}}
 #component{inset:24% 23% 24% 27%;background:repeating-linear-gradient(90deg,#4b4b3a 0 5px,#393d33 5px 10px);border:2px solid #9a9a79}
+#component.loose-connector{inset:22% 3% 22% auto;width:19%;font-size:.75rem}
 #component.empty{background:#1c2320;border:2px dashed #b1b78c}
 #component.new{background:repeating-linear-gradient(90deg,#607564 0 5px,#465d4d 5px 10px);border-color:#b9d1af}
 #spare{z-index:1;bottom:4%;right:3%;width:28%;background:#57452a;border:1px solid #e0be70;font-size:.8rem}
@@ -61,6 +62,20 @@ small{display:block;color:#bdbdae;line-height:1.45;margin-top:1rem}
 .fastener.removed::before{width:12px;height:12px;background:#1a211d;border:1px solid #9a9d80}
 .fastener.treated::before{animation:turn-fixing .26s ease-out}
 @keyframes turn-fixing{from{transform:rotate(-120deg) scale(1.2)}to{transform:rotate(0)}}
+#repairScene{user-select:none;min-height:205px}
+#repairScene button{touch-action:none}
+#repairScene button.dragging{z-index:5;pointer-events:none;transform:translate(var(--drag-x),var(--drag-y));cursor:grabbing}
+#repairScene button.movable{cursor:grab}
+#repairScene .fastener.turning{outline:2px solid var(--yellow);outline-offset:2px;background:conic-gradient(var(--yellow) var(--sweep),#1c241d var(--sweep))}
+.fastener.turning::before,.fastener.partial::before{transform:rotate(var(--turn))}
+#repairScene .fastener.partial{background:conic-gradient(var(--yellow) var(--sweep),#1c241d var(--sweep))}
+#repairScene .drop-zone{position:absolute;z-index:4;display:grid;place-items:center;border:2px dashed #d6bf7b;border-radius:8px;color:#ffe8a8;font-size:.74rem;text-align:center;pointer-events:none}
+#repairScene .drop-zone.ready{background:#6b573bcc;border-color:#fff0bc}
+#repairScene .drop-zone[data-zone=open]{inset:10% auto 10% 4%;width:16%;writing-mode:vertical-rl}
+#repairScene .drop-zone[data-zone=close]{inset:9% 14%}
+#repairScene .drop-zone[data-zone=remove],#repairScene .drop-zone[data-zone=disconnect]{inset:22% 3% 22% auto;width:19%}
+#repairScene .drop-zone[data-zone=install],#repairScene .drop-zone[data-zone=reconnect]{inset:24% 23% 24% 27%}
+#repairScene #spare{bottom:3%;right:2%;width:22%;min-height:44px}
 #toolHint{margin:0;font-size:.85rem}
 @media(orientation:landscape) and (max-height:530px){
   #workbench{grid-template-columns:minmax(0,1fr) minmax(0,1.65fr)}
@@ -154,6 +169,7 @@ dialog .panel{max-height:min(85dvh,46rem)}
       <button id="cover" type="button"></button>
       <button id="spare" type="button"></button>
       <div id="fasteners"></div>
+      <div id="dropZone" class="drop-zone" hidden aria-hidden="true"></div>
     </div>
     <p id="toolHint" aria-live="polite"></p>
   </div>
@@ -460,8 +476,98 @@ function board(feedback = ''){
   openPanel(mission.place,'Tableau électrique',
     ['Compare les trois départs avec le témoignage.',...notes].join('\n'),[...actions,close],feedback);
 }
+// Pointer capture keeps a gesture active after the pointer leaves the part.
+function bindGesture(button,{start,move,end,cancel,keyboard}){
+  let active=null;
+  function clear(event,finish){
+    if(active!==event.pointerId) return;
+    active=null;
+    if(button.hasPointerCapture(event.pointerId)) button.releasePointerCapture(event.pointerId);
+    finish(event);
+  }
+  button.onpointerdown=event=>{
+    if(button.disabled || event.button!==0 || event.isPrimary===false || active!==null || !start(event)) return;
+    active=event.pointerId;
+    button.setPointerCapture(active);
+  };
+  button.onpointermove=event=>{if(active===event.pointerId) move(event);};
+  button.onpointerup=event=>clear(event,end);
+  button.onpointercancel=event=>clear(event,cancel);
+  button.onlostpointercapture=event=>clear(event,cancel);
+  button.onclick=event=>{if(event.detail===0 && !button.disabled) keyboard();};
+}
+function screwGesture(button,clockwise,canUse,hint,finish){
+  const fullTurn=Math.PI*2;
+  let center,previous,rotation=0;
+  function track(event){
+    const x=event.clientX-center.x;
+    const y=event.clientY-center.y;
+    if(Math.hypot(x,y)<9){previous=null;return;}
+    const angle=Math.atan2(y,x);
+    if(previous!==null){
+      const diff=angle-previous;
+      const delta=Math.atan2(Math.sin(diff),Math.cos(diff));
+      rotation=Math.min(fullTurn,Math.max(0,rotation+delta*(clockwise?1:-1)));
+    }
+    previous=angle;
+    const degrees=Math.round(rotation*180/Math.PI);
+    button.style.setProperty('--sweep',degrees+'deg');
+    button.style.setProperty('--turn',degrees*(clockwise?1:-1)+'deg');
+    hint.textContent=(clockwise?'Visser':'Dévisser')+' · '+Math.round(rotation/fullTurn*100)+' %';
+  }
+  bindGesture(button,{
+    start:event=>{
+      if(!canUse()) return false;
+      const rect=button.getBoundingClientRect();
+      center={x:rect.left+rect.width/2,y:rect.top+rect.height/2};
+      previous=null;
+      button.classList.add('turning');
+      track(event);
+      return true;
+    },
+    move:track,
+    end:event=>{
+      track(event);
+      button.classList.remove('turning');
+      button.classList.toggle('partial',rotation>0 && rotation<fullTurn-Math.PI/18);
+      if(rotation>=fullTurn-Math.PI/18) finish();
+      else hint.textContent='Maintiens et poursuis la rotation autour de la fixation.';
+    },
+    cancel:()=>{previous=null;button.classList.remove('turning');button.classList.toggle('partial',rotation>0);},
+    keyboard:()=>{if(canUse()) finish();}
+  });
+}
+function dragGesture(button,zone,canUse,hint,finish){
+  let origin,drop;
+  const inZone=event=>event.clientX>=drop.left && event.clientX<=drop.right
+    && event.clientY>=drop.top && event.clientY<=drop.bottom;
+  const reset=()=>{
+    button.classList.remove('dragging');
+    zone.classList.remove('ready');
+  };
+  bindGesture(button,{
+    start:event=>{
+      if(!canUse()) return false;
+      origin={x:event.clientX,y:event.clientY};
+      drop=zone.getBoundingClientRect();
+      button.classList.add('dragging');
+      return true;
+    },
+    move:event=>{
+      button.style.setProperty('--drag-x',event.clientX-origin.x+'px');
+      button.style.setProperty('--drag-y',event.clientY-origin.y+'px');
+      zone.classList.toggle('ready',inZone(event));
+    },
+    end:event=>{
+      reset();
+      if(Math.hypot(event.clientX-origin.x,event.clientY-origin.y)>15 && inZone(event)) finish();
+      else hint.textContent='Fais glisser la pièce jusque dans la zone en pointillés, puis relâche.';
+    },
+    cancel:reset,
+    keyboard:()=>{if(canUse()) finish();}
+  });
+}
 let selectedTool=null;
-let spareHeld=false;
 let repairStepsForMission=[];
 function repairBench(step,feedback){
   openPanel(mission.place,step.title,step.hint,[close],feedback);
@@ -481,16 +587,13 @@ function repairBench(step,feedback){
     button.textContent=label;
     button.onclick=()=>{
       selectedTool=id;
-      if(id!=='hand') spareHeld=false;
       updateTools();
     };
     return [id,button];
   });
   function updateTools(){
     for(const [id,button] of buttons) button.setAttribute('aria-pressed',String(id===selectedTool));
-    spare.setAttribute('aria-pressed',String(spareHeld));
-    spare.textContent=spareHeld?'Pièce en main':'Prendre la pièce neuve';
-    hint.textContent=selectedTool ? tools[selectedTool]+' en main.' : 'Choisis un outil dans la mallette.';
+    hint.textContent=selectedTool ? tools[selectedTool]+' en main. '+instruction : 'Choisis un outil dans la mallette.';
   }
   function useTool(id){
     if(selectedTool===id) return true;
@@ -498,38 +601,49 @@ function repairBench(step,feedback){
     return false;
   }
   function advance(){
-    spareHeld=false;
     progress.fixings.clear();
     progress.work++;
     progress.fixed=progress.work===repairStepsForMission.length;
     updateObjective();
     equipment(progress.fixed?'Le capot est refermé et toutes ses vis sont serrées.':'');
   }
+  const zone=get('dropZone');
+  const destinations={
+    open:'Ranger le capot',close:'Reposer le capot',remove:'Pièce usée',install:'Logement vide',
+    disconnect:'Connecteur dégagé',reconnect:'Prise du connecteur'
+  };
+  const destination=destinations[step.id];
+  const gestureTarget=step.id==='install'?spare:step.target==='cover'?cover:component;
+  const clockwise=!step.removing;
+  const instruction=destination ? 'Maintiens et glisse vers la zone en pointillés.'
+    : step.target==='fasteners' && step.shape!=='slot'
+      ? 'Maintiens et tourne '+(clockwise?'dans le sens horaire.':'dans le sens antihoraire.')
+      : 'Actionne la zone indiquée.';
+  zone.hidden=!destination;
+  zone.dataset.zone=step.id;
+  zone.textContent=destination || '';
   cover.hidden=false;
   cover.className=coverOpen?'cover-open':'';
   cover.textContent=coverOpen?'Ouvert':part.cover;
   cover.disabled=step.target!=='cover';
-  cover.onclick=()=>{if(useTool(step.tool)) advance();};
   component.hidden=!coverOpen;
-  component.className=empty?'empty':after('install')?'new':'';
+  component.className=step.id==='reconnect'?'loose-connector':empty?'empty':after('install')?'new':'';
   component.textContent=empty?'Logement vide':step.id==='disconnect'||step.id==='reconnect'?'Connecteur du module':part.piece;
-  component.disabled=step.target!=='component';
-  component.onclick=()=>{
-    if(!useTool(step.tool)) return;
-    if(step.id==='install' && !spareHeld){
-      hint.textContent='Prends d’abord la pièce neuve.';
-      return;
-    }
-    advance();
-  };
+  component.disabled=step.target!=='component' || step.id==='install';
   spare.hidden=step.id!=='install';
-  spare.onclick=()=>{
-    if(!useTool('hand')) return;
-    spareHeld=true;
-    updateTools();
-    hint.textContent='Pièce en main. Sélectionne son logement.';
-    component.focus();
-  };
+  spare.textContent='Pièce neuve';
+  for(const button of [cover,component,spare]){
+    button.onpointerdown=button.onpointermove=button.onpointerup=button.onpointercancel=button.onlostpointercapture=button.onclick=null;
+    button.classList.remove('dragging','movable');
+    button.style.setProperty('--drag-x','0px');
+    button.style.setProperty('--drag-y','0px');
+  }
+  if(destination){
+    gestureTarget.classList.add('movable');
+    dragGesture(gestureTarget,zone,()=>useTool(step.tool),hint,advance);
+  }else if(step.target==='component'){
+    component.onclick=()=>{if(useTool(step.tool)) advance();};
+  }
   const locations=step.coverFixings || step.id==='open' ? [[23,24],[77,76]] : [[34,28],[69,28],[69,70]];
   const showInactiveHoles=step.id==='open';
   const fixings=Array.from({length:step.target==='fasteners'?step.count:showInactiveHoles?2:0},(_,index)=>{
@@ -549,8 +663,8 @@ function repairBench(step,feedback){
     button.setAttribute('aria-label',label);
     if(showInactiveHoles){button.classList.add('removed');button.disabled=true;}
     else if(progress.fixings.has(index)) markDone();
-    button.onclick=()=>{
-      if(progress.fixings.has(index) || !useTool(step.tool)) return;
+    function finish(){
+      if(progress.fixings.has(index)) return;
       progress.fixings.add(index);
       markDone();
       if(progress.fixings.size===step.count) advance();
@@ -559,7 +673,11 @@ function repairBench(step,feedback){
         saveProgress();
         fixings.find(fixing=>!fixing.disabled)?.focus();
       }
-    };
+    }
+    if(!button.disabled){
+      if(step.shape==='slot') button.onclick=()=>{if(useTool(step.tool)) finish();};
+      else screwGesture(button,clockwise,()=>useTool(step.tool),hint,finish);
+    }
     return button;
   });
   get('fasteners').replaceChildren(...fixings);
@@ -613,8 +731,7 @@ function equipment(feedback = ''){
       }
       progress.work=0;
       progress.fixings.clear();
-      spareHeld=false;
-      selectedTool=null;
+        selectedTool=null;
       saveProgress();
       equipment();
     }]));
@@ -1123,7 +1240,6 @@ function startMission(index,resume=null){
     ? resume.fixings.filter(fixing=>Number.isInteger(fixing) && fixing>=0 && fixing<repairStepsForMission[work].count) : []);
   progress={interview,tests,isolated,secured,checks,work,fixings,fixed,energized,verified:energized && resume?.verified===true,powered:false};
   selectedTool=null;
-  spareHeld=false;
   poweredAt=undefined;
   keys.clear();
   resetPad();
