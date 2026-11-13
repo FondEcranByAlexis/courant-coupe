@@ -38,6 +38,7 @@ small{display:block;color:#bdbdae;line-height:1.45;margin-top:1rem}
 #compass{position:absolute;bottom:4.4rem;left:50%;transform:translateX(-50%);padding:.28rem .55rem;font-size:.77rem;white-space:nowrap}
 #choices{display:grid;gap:.5rem}
 #choices button{text-align:left}
+#description{white-space:pre-line}
 #message{min-height:1.5em;color:var(--yellow);margin:.7rem 0 0}
 dialog{padding:0;border:0;background:none;max-height:calc(100% - 1.2rem);width:min(calc(100% - 1.2rem),33rem);color:inherit}
 dialog::backdrop{background:#080c09b8}
@@ -131,7 +132,6 @@ const missions = [
     title:'La première fournée', place:'Boulangerie', client:'le boulanger', time:'05 h 42',
     report:'La vitrine et les lampes marchaient. Dès que j’ai lancé la chauffe du four, tout s’est éteint.',
     circuits:['Éclairage','Vitrine','Four'], fault:2, equipment:'Four de cuisson', short:'Four',
-    reading:'Défaut détecté sur le module de chauffe.',
     repair:'Remplacer le module de chauffe',
     choices:['Remplacer la minuterie','Remplacer l’écran de commande'],
     win:'La fournée est sauvée', result:'Le four, la vitrine et les lampes fonctionnent. Le boulanger peut lancer sa première fournée.',
@@ -141,7 +141,6 @@ const missions = [
     title:'Sous-sol dans le noir', place:'Parking souterrain', client:'le gardien', time:'21 h 18',
     report:'La barrière répond encore. Après le passage d’une voiture, toute la rangée de lampes de l’allée s’est éteinte.',
     circuits:['Éclairage','Ventilation','Barrière'], fault:0, equipment:'Armoire d’éclairage', short:'Armoire',
-    reading:'La commande est reçue, mais le relais d’éclairage ne commute pas.',
     repair:'Remplacer le relais d’éclairage',
     choices:['Remplacer le capteur de présence','Remplacer le moteur de la barrière'],
     win:'L’allée se rallume', result:'Les plafonniers éclairent à nouveau l’allée et les places de stationnement.',
@@ -151,7 +150,6 @@ const missions = [
     title:'Le rideau va se lever', place:'Salle de spectacle', client:'la régisseuse', time:'19 h 50',
     report:'Les balises restent allumées. Quand j’ai envoyé le premier effet, les projecteurs de la scène ont coupé.',
     circuits:['Sonorisation','Projecteurs','Balisage'], fault:1, equipment:'Rack des projecteurs', short:'Rack',
-    reading:'Le module de puissance du rack renvoie une erreur de sortie.',
     repair:'Remplacer le module de puissance',
     choices:['Remplacer la console de son','Remplacer la batterie des balises'],
     win:'Place au spectacle', result:'Les projecteurs reprennent leur séquence. La régisseuse peut lancer le spectacle.',
@@ -161,7 +159,6 @@ const missions = [
     title:'Alerte au froid', place:'Entrepôt frigorifique', client:'la responsable', time:'04 h 26',
     report:'Les lampes sont restées allumées. Le groupe froid s’est arrêté et l’écran indique que la température remonte.',
     circuits:['Groupe froid','Éclairage','Quai'], fault:0, equipment:'Groupe frigorifique', short:'Groupe froid',
-    reading:'Le ventilateur du condenseur renvoie un défaut de rotation.',
     repair:'Remplacer le ventilateur du condenseur',
     choices:['Remplacer le voyant de température','Remplacer la commande de quai'],
     win:'Le froid revient', result:'Le groupe frigorifique redémarre et la température commence à redescendre.',
@@ -171,11 +168,62 @@ const missions = [
     title:'Dernier départ', place:'Gare', client:'le chef de gare', time:'22 h 54',
     report:'Les lampes et les annonces fonctionnent. Les écrans de départ se sont tous figés juste avant le dernier train.',
     circuits:['Annonces','Éclairage','Affichage'], fault:2, equipment:'Baie d’affichage', short:'Affichage',
-    reading:'La baie est alimentée. Son contrôleur ne répond plus au test de communication.',
     repair:'Remplacer le contrôleur d’affichage',
     choices:['Remplacer l’amplificateur des annonces','Remplacer le programmateur d’éclairage'],
     win:'Départ affiché', result:'Les écrans indiquent le quai et l’heure du dernier train.',
     colors:['#78827b','#565c52','#83816b','#a78b49']
+  }
+];
+const procedures = [
+  {
+    panel:'Protection déclenchée lors de la demande de chauffe.',
+    diagnosis:[
+      ['Consulter le journal du four','La coupure correspond au démarrage de la chauffe. La minuterie et l’afficheur répondaient.'],
+      ['Tester le module de chauffe hors tension','Le simulateur signale un défaut d’isolement sur le module de chauffe.']
+    ],
+    work:[['Déposer le module défectueux','Le module est retiré et la référence de la pièce est relevée.'],['Installer le module de rechange','Le module de même référence est installé.'],['Remettre le capot','Le four est refermé et prêt pour l’essai.']],
+    trial:'Lancer un cycle de préchauffage',
+    result:'La température monte et la protection ne déclenche plus.'
+  },
+  {
+    panel:'Protection enclenchée. Le retour d’état de l’allée reste éteint.',
+    diagnosis:[
+      ['Relire les événements du détecteur','Un passage est bien enregistré et la commande d’allumage est transmise.'],
+      ['Contrôler le relais sur le banc de test','Le relais reçoit la commande simulée, mais son contact ne bascule pas.']
+    ],
+    work:[['Retirer le relais défectueux','Le relais est retiré de son support.'],['Poser le relais de rechange','Le nouveau relais est en place.'],['Refermer l’armoire','L’armoire est refermée.']],
+    trial:'Simuler un passage dans l’allée',
+    result:'Les plafonniers s’allument au passage, puis s’éteignent après la temporisation de test.'
+  },
+  {
+    panel:'Protection enclenchée. Le rack signale un défaut de sortie.',
+    diagnosis:[
+      ['Consulter le journal de la console','Le premier effet a bien été envoyé. Le signal de commande est arrivé au rack.'],
+      ['Tester le module sur le banc de test','L’entrée répond, mais la sortie du module reste inactive sur une charge de test.']
+    ],
+    work:[['Repérer les connexions du module','Les connexions du module sont identifiées dans le rack.'],['Échanger le module de puissance','Le module de remplacement est raccordé dans la simulation.'],['Refermer le rack','Le rack est prêt pour l’essai de scène.']],
+    trial:'Jouer le premier effet lumière',
+    result:'Les projecteurs répondent et suivent la séquence de la console.'
+  },
+  {
+    panel:'Protection enclenchée. Le groupe s’est arrêté sur alarme.',
+    diagnosis:[
+      ['Lire l’historique des alarmes','Le ventilateur s’est arrêté avant la mise en sécurité du groupe.'],
+      ['Inspecter le ventilateur à l’arrêt','La grille est dégagée. Le contrôle du simulateur confirme que le moteur du ventilateur est bloqué.']
+    ],
+    work:[['Déposer le ventilateur bloqué','Le ventilateur est retiré du condenseur.'],['Monter le ventilateur de rechange','Le ventilateur de rechange est posé.'],['Reposer la grille de protection','La grille est en place et le groupe peut être essayé.']],
+    trial:'Lancer un cycle de froid',
+    result:'Le ventilateur tourne, l’alarme disparaît et la température commence à baisser.'
+  },
+  {
+    panel:'Protection enclenchée. La baie reçoit son alimentation.',
+    diagnosis:[
+      ['Consulter le journal de la baie','Les données horaires arrivent toujours au commutateur de la baie.'],
+      ['Tester la liaison vers les écrans','La liaison répond au banc de test. Le contrôleur ne transmet plus les mises à jour.']
+    ],
+    work:[['Récupérer la configuration de la baie','Une copie de la configuration des écrans est disponible.'],['Échanger et configurer le contrôleur','Le nouveau contrôleur reprend la configuration des écrans.'],['Refermer la baie','La baie est refermée et prête à synchroniser les horaires.']],
+    trial:'Envoyer un horaire de test aux écrans',
+    result:'Le quai et l’heure se mettent à jour sur tous les écrans, puis l’affichage normal reprend.'
   }
 ];
 const targets = [
@@ -212,7 +260,12 @@ function saveProgress(){
     interview:progress.interview,
     tests:[...progress.tests],
     isolated:progress.isolated,
-    fixed:progress.fixed
+    fixed:progress.fixed,
+    secured:progress.secured,
+    checks:[...progress.checks],
+    work:progress.work,
+    energized:progress.energized,
+    verified:progress.verified
   };
   try{localStorage.setItem(saveKey,JSON.stringify({completed:[...completed],checkpoint}));}catch{}
 }
@@ -249,73 +302,147 @@ function openPanel(category, title, description, actions, feedback = ''){
 }
 const close = ['Retour à la mission', () => modal.close()];
 
+function updateObjective(){
+  const contact=targets[0].name.toLowerCase();
+  if(progress.verified) objective('client','Retourne faire le compte rendu.');
+  else if(progress.energized) objective('equipment','Effectue l’essai de fonctionnement.');
+  else if(progress.fixed) objective('board','Retourne au tableau pour remettre le circuit en service.');
+  else if(progress.secured) objective('equipment','Inspecte l’équipement et effectue la réparation.');
+  else if(progress.isolated) objective('board','Sécurise le circuit et confirme la mise hors tension simulée.');
+  else if(progress.interview) objective('board','Examine le tableau et compare les relevés.');
+  else objective('client',contact[0].toUpperCase()+contact.slice(1)+'.');
+}
 function client(){
+  if(progress.verified){
+    const procedure=procedures[missionIndex];
+    openPanel(mission.place,'Compte rendu',procedure.result,
+      [['Confirmer la remise en service',restore,true],close]);
+    return;
+  }
   if(!progress.interview){
     progress.interview=true;
-    objective('board','Examine le tableau et compare les relevés.');
+    updateObjective();
   }
   openPanel(mission.place,mission.client[0].toUpperCase()+mission.client.slice(1),'« '+mission.report+' »',
     [['Reprendre la mission', () => modal.close(), true]]);
 }
 function board(feedback = ''){
-  const fault=mission.circuits[mission.fault];
+  const procedure=procedures[missionIndex];
   if(!progress.interview){
     openPanel(mission.place,'Tableau électrique','Interroge la personne sur place avant de commencer le diagnostic.',[close]);
     return;
   }
+  if(progress.energized){
+    openPanel(mission.place,'Circuit en service','Consulte ton objectif pour terminer l’intervention.',[close]);
+    return;
+  }
   if(progress.fixed){
-    openPanel(mission.place,'Contrôle final','La réparation est terminée. Relance le circuit pour vérifier que l’équipement fonctionne.',
-      [['Remettre le circuit en service', restore, true],close]);
+    openPanel(mission.place,'Remise en service','L’équipement est refermé. Remets le circuit en service pour passer à l’essai.',
+      [['Remettre le circuit en service',()=>{
+        progress.energized=true;
+        updateObjective();
+        modal.close();
+      },true],close]);
     return;
   }
   if(progress.isolated){
-    openPanel(mission.place,'Circuit isolé','Tu peux intervenir sur l’équipement dans la simulation.',[close]);
+    if(progress.secured){
+      openPanel(mission.place,'Circuit sécurisé','La mise hors tension est confirmée dans la simulation.',[close]);
+      return;
+    }
+    openPanel(mission.place,'Mise en sécurité','Le circuit est isolé. Le contrôle de sécurité est simulé avant toute intervention.',
+      [['Consigner et vérifier la mise hors tension',()=>{
+        progress.secured=true;
+        updateObjective();
+        board();
+      },true],close]);
     return;
   }
-  const actions=mission.circuits.map((circuit,index)=>[
-    progress.tests.has(index) ? circuit+' · relevé effectué' : 'Relever le circuit '+circuit.toLowerCase(),
-    ()=>{
+  const readings=mission.circuits.map((circuit,index)=>circuit+' · '+(index===mission.fault
+    ? procedure.panel : 'Protection enclenchée. Fonctionnement normal.'));
+  const actions=mission.circuits.flatMap((circuit,index)=>progress.tests.has(index) ? [] : [
+    ['Relever le circuit '+circuit.toLowerCase(),()=>{
       progress.tests.add(index);
       saveProgress();
-      board(circuit+' · '+(index===mission.fault ? mission.reading : 'Aucun défaut détecté.'));
-    }
+      board();
+    }]
   ]);
   if(progress.tests.size===mission.circuits.length){
-    actions.push(...mission.circuits.map(circuit=>['Isoler le circuit '+circuit.toLowerCase(),()=>{
-      if(circuit!==fault){
-        board('Ce circuit ne présente aucun défaut. Compare les relevés.');
+    actions.push(...mission.circuits.map((circuit,index)=>['Isoler le circuit '+circuit.toLowerCase(),()=>{
+      if(index!==mission.fault){
+        board('Ce départ alimente un équipement qui fonctionne. Compare les relevés au témoignage.');
         return;
       }
       progress.isolated=true;
-      objective('equipment','Interviens sur l’équipement indiqué.');
+      updateObjective();
       board();
     }]));
   }
-  openPanel(mission.place,'Tableau électrique','Compare les trois relevés pour identifier le circuit en défaut.',[...actions,close],feedback);
+  const notes=[...progress.tests].sort().map(index=>readings[index]);
+  openPanel(mission.place,'Tableau électrique',
+    ['Compare les trois départs avec le témoignage.',...notes].join('\n'),[...actions,close],feedback);
 }
 function equipment(feedback = ''){
-  if(!progress.isolated){
-    openPanel(mission.place,mission.equipment,'Vérifie les circuits au tableau avant d’intervenir.',[close]);
+  const procedure=procedures[missionIndex];
+  if(progress.energized){
+    if(progress.verified){
+      openPanel(mission.place,'Essai réussi',procedure.result,[close]);
+      return;
+    }
+    openPanel(mission.place,'Essai de fonctionnement','Vérifie que le symptôme a disparu dans les conditions de départ.',
+      [[procedure.trial,()=>{
+        progress.verified=true;
+        updateObjective();
+        equipment();
+      },true],close]);
     return;
   }
   if(progress.fixed){
     openPanel(mission.place,'Réparation terminée','Retourne au tableau pour remettre le circuit en service.',[close]);
     return;
   }
-  const repairs=[...mission.choices];
-  repairs.splice(mission.fault,0,mission.repair);
-  openPanel(mission.place,mission.equipment,mission.reading,[...repairs.map(label=>[label,()=>{
-    if(label!==mission.repair){
-      equipment('Le défaut persiste. Utilise le relevé pour identifier le composant.');
-      return;
-    }
-    progress.fixed=true;
-    objective('board','Retourne au tableau pour remettre le circuit en service.');
-    equipment();
-  }]),close],feedback);
+  if(!progress.secured){
+    openPanel(mission.place,mission.equipment,'Sécurise le circuit au tableau avant d’intervenir.',[close]);
+    return;
+  }
+  const notes=[...progress.checks].sort().map(index=>procedure.diagnosis[index][1]);
+  if(progress.work>=0){
+    const [label]=procedure.work[progress.work];
+    openPanel(mission.place,'Réparation',feedback || 'Pièce confirmée. Procède à la réparation dans la simulation.',
+      [[label,()=>{
+        const result=procedure.work[progress.work][1];
+        progress.work++;
+        progress.fixed=progress.work===procedure.work.length;
+        updateObjective();
+        equipment(result);
+      },true],close]);
+    return;
+  }
+  const actions=procedure.diagnosis.flatMap(([label],index)=>progress.checks.has(index) ? [] : [
+    [label,()=>{
+      progress.checks.add(index);
+      saveProgress();
+      equipment();
+    }]
+  ]);
+  if(progress.checks.size===procedure.diagnosis.length){
+    const repairs=[...mission.choices];
+    repairs.splice(mission.fault,0,mission.repair);
+    actions.push(...repairs.map(label=>[label,()=>{
+      if(label!==mission.repair){
+        equipment('Cette pièce ne correspond pas aux résultats des contrôles.');
+        return;
+      }
+      progress.work=0;
+      saveProgress();
+      equipment();
+    }]));
+  }
+  openPanel(mission.place,mission.equipment,['Relève les indices sur l’équipement.',...notes].join('\n'),
+    [...actions,close],feedback);
 }
 function restore(){
-  if(progress.powered) return;
+  if(progress.powered || !progress.verified) return;
   progress.powered=true;
   completed.add(missionIndex);
   objective(null,'Circuit rétabli · mission réussie');
@@ -455,7 +582,7 @@ function buildScene(){
 
 function sceneLight(now){
   const ambient=[0,0,.13,.32,.3][missionIndex];
-  if(!progress.powered) return ambient;
+  if(!progress.energized || poweredAt===undefined) return ambient;
   return ambient+(1-ambient)*Math.min(1,(now-poweredAt)/850);
 }
 
@@ -654,7 +781,7 @@ function updateHud(){
 function frame(now){
   const delta = Math.min(.05,(now-frameTime)/1000);
   frameTime=now;
-  if(progress.powered && poweredAt===undefined) poweredAt=now;
+  if(progress.energized && poweredAt===undefined) poweredAt=now;
   if(started && !modal.open && !rotationBlocked){move(delta);updateHud();}
   if(gl) renderWebGL(now);
   else renderCanvas(now);
@@ -800,7 +927,15 @@ function startMission(index,resume=null){
   const tests=new Set(interview && Array.isArray(resume?.tests)
     ? resume.tests.filter(test=>Number.isInteger(test) && test>=0 && test<mission.circuits.length) : []);
   const isolated=tests.size===mission.circuits.length && resume?.isolated===true;
-  progress={interview,tests,isolated,fixed:isolated && resume?.fixed===true,powered:false};
+  const procedure=procedures[index];
+  const fixed=isolated && resume?.fixed===true;
+  const secured=isolated && (fixed || resume?.secured===true);
+  const checks=new Set(secured && Array.isArray(resume?.checks)
+    ? resume.checks.filter(check=>Number.isInteger(check) && check>=0 && check<procedure.diagnosis.length) : []);
+  const work=fixed ? procedure.work.length : checks.size===procedure.diagnosis.length &&
+    Number.isInteger(resume?.work) && resume.work>=0 && resume.work<procedure.work.length ? resume.work : -1;
+  const energized=fixed && resume?.energized===true;
+  progress={interview,tests,isolated,secured,checks,work,fixed,energized,verified:energized && resume?.verified===true,powered:false};
   poweredAt=undefined;
   keys.clear();
   resetPad();
@@ -818,10 +953,7 @@ function startMission(index,resume=null){
   started=true;
   get('intro').hidden=true;
   get('missionName').textContent='Mission '+String(index+1).padStart(2,'0')+' · '+mission.time;
-  if(progress.fixed) objective('board','Retourne au tableau pour remettre le circuit en service.');
-  else if(progress.isolated) objective('equipment','Interviens sur l’équipement indiqué.');
-  else if(progress.interview) objective('board','Examine le tableau et compare les relevés.');
-  else objective('client','Va parler '+contact+'.');
+  updateObjective();
   updateHud();
   updateOrientation();
 }
