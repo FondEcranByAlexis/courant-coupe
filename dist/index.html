@@ -27,8 +27,9 @@ small{display:block;color:#bdbdae;line-height:1.45;margin-top:1rem}
 #brief,#help,#action,#stick,#compass{background:#151914ec;border:1px solid var(--border);border-radius:10px}
 #brief{padding:.65rem .8rem;max-width:28rem}
 #goal{display:block;margin-top:.27rem;font-size:clamp(.83rem,2.5vw,1rem)}
-#help,#action,#stick,#missionsButton{pointer-events:auto}
-#help,#missionsButton{padding:.52rem .7rem}
+#help,#action,#stick,#missionsButton,#soundButton{pointer-events:auto}
+#help,#missionsButton,#soundButton{padding:.52rem .7rem}
+#soundButton[aria-pressed=false]{opacity:.65}
 #toolbar{display:flex;gap:.4rem}
 #cross{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:8px;height:8px;border:1px solid #fff;border-radius:50%;box-shadow:0 0 5px #000}
 #action{position:absolute;left:50%;bottom:max(1rem,env(safe-area-inset-bottom));transform:translateX(-50%);white-space:nowrap;background:#222419;padding:.68rem .9rem}
@@ -129,7 +130,7 @@ dialog .panel{max-height:min(85dvh,46rem)}
 <body>
 <canvas id="view" aria-label="Lieu de la mission en 3D"></canvas>
 <div id="hud" hidden>
-  <div id="top"><div id="brief"><div class="brand" id="missionName"></div><strong id="goal"></strong></div><div id="toolbar"><button id="missionsButton">Accueil</button><button id="help" aria-label="Afficher les commandes">?</button></div></div>
+  <div id="top"><div id="brief"><div class="brand" id="missionName"></div><strong id="goal"></strong></div><div id="toolbar"><button id="missionsButton">Accueil</button><button id="soundButton" type="button" aria-pressed="true">Son</button><button id="help" aria-label="Afficher les commandes">?</button></div></div>
   <span id="cross"></span><div id="compass"></div>
   <div id="stick" aria-label="Joystick de déplacement"><div id="thumb"></div></div>
   <button id="action" disabled>Interagir</button>
@@ -434,6 +435,8 @@ function board(feedback = ''){
     openPanel(mission.place,'Remise en service','L’équipement est refermé. Remets le circuit en service pour passer à l’essai.',
       [['Remettre le circuit en service',()=>{
         progress.energized=true;
+        updateAmbience();
+        playSound(95,.18,.075,'triangle');
         updateObjective();
         modal.close();
       },true],close]);
@@ -601,6 +604,7 @@ function repairBench(step,feedback){
     return false;
   }
   function advance(){
+    playSound(125,.095,.028,'triangle');
     progress.fixings.clear();
     progress.work++;
     progress.fixed=progress.work===repairStepsForMission.length;
@@ -666,6 +670,7 @@ function repairBench(step,feedback){
     function finish(){
       if(progress.fixings.has(index)) return;
       progress.fixings.add(index);
+      playSound(220,.065,.024,'triangle');
       markDone();
       if(progress.fixings.size===step.count) advance();
       else{
@@ -696,6 +701,7 @@ function equipment(feedback = ''){
     openPanel(mission.place,'Essai de fonctionnement','Vérifie que le symptôme a disparu dans les conditions de départ.',
       [[procedure.trial,()=>{
         progress.verified=true;
+        playSound([145,210,440,112,620][missionIndex],.32,.046,'sine');
         updateObjective();
         equipment();
       },true],close]);
@@ -765,8 +771,8 @@ function interact(){
 
 const boxes = [];
 const colliders = [];
-function box(x,y,z,w,h,d,color,{solid=false,glow=false}={}){
-  boxes.push({x,y,z,w,h,d,color,glow});
+function box(x,y,z,w,h,d,color,{solid=false,glow=false,signal=false}={}){
+  boxes.push({x,y,z,w,h,d,color,glow,signal});
   if(solid) colliders.push({x,z,w,d});
 }
 function createBakery(){
@@ -864,7 +870,85 @@ function createVenue(){
       box(3.42,.9,z,.14,.69,.6,'#626960');
     }
     box(-1.7,2.45,-4.26,2.4,.48,.22,'#232c2d');
-    for(const x of [-2.5,-1.8,-1.1]) box(x,2.45,-4.13,.47,.09,.035,'#dfb963',{glow:true});
+    for(const x of [-2.5,-1.8,-1.1]) box(x,2.45,-4.13,.47,.09,.035,'#dfb963',{glow:true,signal:true});
+  }
+}
+function addSceneDetails(){
+  const [wall,floor,,accent]=mission.colors;
+  for(const x of [-3.86,3.86]){
+    box(x,.1,0,.035,.16,8.7,floor);
+    box(x,2.72,0,.055,.065,8.5,'#5b605a');
+  }
+  box(0,.1,-4.36,7.7,.16,.035,floor);
+  box(-3.75,2.24,-2.45,.08,.65,.09,'#8f9387');
+  box(-3.69,1.8,-2.45,.046,.10,.42,'#d9bd68');
+  for(const z of [-2.74,-2.45,-2.16]) box(-3.609,1.39,z,.034,.028,.055,'#acc494');
+  box(.054,1.58,.48,.027,.017,.012,'#33302e');
+  box(-.054,1.58,.48,.027,.017,.012,'#33302e');
+  box(0,1.24,.502,.26,.16,.019,accent);
+  box(2.2,1.48,-3.345,.34,.09,.02,'#202823');
+  for(const x of [2.11,2.2,2.29]) box(x,1.48,-3.328,.038,.027,.012,'#a7dba0',{glow:true,signal:true});
+
+  if(missionIndex===0){
+    for(const y of [1.15,1.63,2.1]){
+      box(-2.03,y,-4.18,2.12,.07,.48,'#a58254');
+      for(let i=0;i<5;i++){
+        const x=-2.87+i*.41;
+        box(x,y+.13,-4.12,.31,.19,.28,'#ac6e35');
+        box(x,y+.226,-4.12,.22,.037,.24,'#d6a65e');
+        box(x,y+.249,-4.12,.13,.016,.033,'#ecd39a');
+      }
+    }
+    for(const x of [-.83,-.42,0,.42,.83]){
+      box(x,.53,1.355,.027,.85,.019,'#653c2b');
+    }
+    for(const z of [.19,1.85]) box(3.18,1.38,z,1.1,.055,.045,'#a49e88');
+    box(3.18,1.38,1,1.1,.055,1.72,'#96a9a4');
+    for(const x of [2.64,3.72]) for(const z of [.19,1.85]) box(x,1.2,z,.032,.35,.032,'#a49e88');
+  }
+  if(missionIndex===1){
+    for(const x of [-3.72,3.72]) box(x,.88,0,.08,.13,8.45,accent);
+    box(-2.62,.49,2.85,1.25,.52,1.94,'#536773',{solid:true});
+    box(-2.62,.88,2.76,1.08,.31,.96,'#3f555f');
+    box(-2.62,.87,2.267,.94,.23,.04,'#253a40');
+    for(const x of [-3.24,-2]) for(const z of [2.22,3.45]) box(x,.25,z,.18,.38,.39,'#282b2b');
+    for(const x of [-3.02,-2.22]) box(x,.54,1.86,.22,.12,.047,'#c4c8ad');
+  }
+  if(missionIndex===2){
+    for(let i=0;i<12;i++){
+      const x=-3.62+i*.28;
+      box(x,1.72,-4.14,.14,2.64,.11,i%2?'#733f57':'#5e3248');
+    }
+    box(-1.58,2.72,-3.12,3.75,.1,.14,'#28282c');
+    for(const x of [-3,-1.72,-.44]){
+      box(x,2.5,-3.13,.24,.28,.24,'#33373b');
+      box(x,2.47,-2.995,.14,.13,.026,'#ffd5a2',{glow:true,signal:true});
+    }
+    for(const z of [.15,1.0,1.85]){
+      box(3.12,.45,z,.94,.12,.48,'#764256',{solid:true});
+      box(3.47,.69,z,.17,.52,.48,'#593245');
+    }
+  }
+  if(missionIndex===3){
+    for(const y of [.24,.77,1.3,1.83]){
+      box(-2.27,y,-4.11,1.57,.067,.58,'#809195');
+      for(const x of [-2.78,-2.26,-1.74]) box(x,y+.18,-4.06,.39,.29,.37,'#af9878');
+    }
+    for(const x of [-3,-1.55]) box(x,1,-4.09,.063,2,.058,'#637d82');
+    for(let i=0;i<8;i++) box(2.2,1.11-i*.059,-3.326,.94,.027,.04,'#697d7f');
+    box(0,2.86,-4.2,6.5,.14,.22,'#839da4');
+  }
+  if(missionIndex===4){
+    for(const z of [-.75,2.75]){
+      for(const x of [2.75,3.34]) box(x,.26,z,.09,.52,.46,'#636962');
+    }
+    box(-1.7,2.47,-4.125,2.18,.22,.026,'#192821');
+    for(let i=0;i<10;i++){
+      const x=-2.66+i*.214;
+      box(x,2.48,-4.10,.13,.033,.021,'#edb95e',{glow:true,signal:true});
+      if(i%3!==1) box(x,2.40,-4.10,.11,.027,.021,'#99c49d',{glow:true,signal:true});
+    }
+    box(.95,.019,3.45,5.0,.016,.11,'#bd9a50');
   }
 }
 function buildScene(){
@@ -872,6 +956,7 @@ function buildScene(){
   colliders.length=0;
   if(missionIndex===0) createBakery();
   else createVenue();
+  addSceneDetails();
   for(const object of boxes){
     object.rgb=object.color.slice(1).match(/../g).map(pair=>parseInt(pair,16)/255);
   }
@@ -879,9 +964,13 @@ function buildScene(){
 
 
 function sceneLight(now){
-  const ambient=[0,0,.13,.32,.3][missionIndex];
-  if(!progress.energized || poweredAt===undefined) return ambient;
-  return ambient+(1-ambient)*Math.min(1,(now-poweredAt)/850);
+  const ambient=[.08,.045,.22,.55,.55][missionIndex];
+  if(!progress.energized || poweredAt===undefined || missionIndex>=2) return ambient;
+  return ambient+(.94-ambient)*Math.min(1,Math.max(0,(now-poweredAt)/780));
+}
+function fixtureLight(object,light){
+  if(object.signal) return progress.verified ? 1 : progress.energized ? .25 : 0;
+  return object.glow ? light : 0;
 }
 
 function shader(type, code){
@@ -899,9 +988,11 @@ function setupGraphics(){
     attribute float aShade;
     uniform vec3 uPosition, uSize, uCamera;
     uniform vec2 uYaw, uPitch, uProjection;
-    varying float vShade, vDepth;
+    varying mediump float vShade, vDepth;
+    varying mediump vec3 vWorld;
     void main(){
-      vec3 p = aVertex*uSize+uPosition-uCamera;
+      vWorld=aVertex*uSize+uPosition;
+      vec3 p = vWorld-uCamera;
       float x = p.x*uYaw.x+p.z*uYaw.y;
       float front = p.x*uYaw.y-p.z*uYaw.x;
       float y = p.y*uPitch.x-front*uPitch.y;
@@ -914,10 +1005,13 @@ function setupGraphics(){
     precision mediump float;
     uniform vec3 uColor;
     uniform float uLight, uGlow;
-    varying float vShade, vDepth;
+    varying mediump float vShade, vDepth;
+    varying mediump vec3 vWorld;
     void main(){
-      float brightness = mix(.54 + .19 / (1. + vDepth*.18),1.08,uLight);
-      vec3 color = uColor * mix(vShade*brightness,1.22,uGlow*uLight);
+      float ceilingPool = 1.0 - smoothstep(.1,3.2,length(vec2(vWorld.x,mod(vWorld.z+1.35,2.7)-1.35)));
+      float brightness = .34 + .12/(1.0+vDepth*.16) + uLight*(.47+.21*ceilingPool);
+      float surfaceGrain = .96 + .08*fract(sin(dot(floor(vWorld*55.),vec3(12.9,27.1,19.3)))*1963.4);
+      vec3 color = uColor * mix(vShade*brightness*surfaceGrain,1.35,uGlow);
       gl_FragColor=vec4(mix(color,vec3(.15,.15,.12),smoothstep(7.,16.,vDepth)*.5),1.);
     }`));
   gl.linkProgram(program);
@@ -960,7 +1054,7 @@ function renderWebGL(now){
   const light = sceneLight(now);
   gl.clearColor(.16,.16,.14,1);
   gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
-  gl.uniform3f(locations.Camera,camera.x,1.61,camera.z);
+  gl.uniform3f(locations.Camera,camera.x,eyeHeight,camera.z);
   gl.uniform2f(locations.Yaw,cy,sy);
   gl.uniform2f(locations.Pitch,Math.cos(camera.pitch),Math.sin(camera.pitch));
   gl.uniform2f(locations.Projection,focal*height/width,focal);
@@ -969,7 +1063,7 @@ function renderWebGL(now){
     gl.uniform3f(locations.Position,object.x,object.y,object.z);
     gl.uniform3f(locations.Size,object.w,object.h,object.d);
     gl.uniform3fv(locations.Color,object.rgb);
-    gl.uniform1f(locations.Glow,Number(object.glow));
+    gl.uniform1f(locations.Glow,fixtureLight(object,light));
     gl.drawArrays(gl.TRIANGLES,0,36);
   }
 }
@@ -1009,7 +1103,7 @@ function renderCanvas(now){
   for(const object of boxes){
     const vertices=corners.map(([vx,vy,vz])=>{
       const x=object.x+vx*object.w/2-camera.x;
-      const y=object.y+vy*object.h/2-1.61;
+      const y=object.y+vy*object.h/2-eyeHeight;
       const z=object.z+vz*object.d/2-camera.z;
       const front=x*sy-z*cy;
       return [x*cy+z*sy,y*cp-front*sp,y*sp+front*cp];
@@ -1024,7 +1118,9 @@ function renderCanvas(now){
       },0);
       if(area>=0) continue;
       const depth=points.reduce((sum,p)=>sum+p[2],0)/points.length;
-      const brightness=object.glow ? shade*.65*(1-light)+light*1.22 : shade*(.55+.15/(1+depth*.18)+light*.4);
+      const pool=1-Math.min(1,Math.hypot(object.x,object.z-2.7*Math.round(object.z/2.7))/3.2);
+      const glow=fixtureLight(object,light);
+      const brightness=shade*(.34+.12/(1+depth*.16)+light*(.47+.21*pool))*(1-glow)+1.35*glow;
       surfaces.push({projected,depth,color:'rgb('+object.rgb.map(value=>Math.round(value*brightness*255)).join(',')+')'});
     }
   }
@@ -1044,6 +1140,9 @@ function clearSpace(x,z){
     Math.abs(x-object.x)>object.w/2+.23 || Math.abs(z-object.z)>object.d/2+.23);
 }
 const pressed = (...names) => names.some(name => keys.has(name));
+let eyeHeight=1.61;
+let stride=0;
+const reducedMotion=matchMedia('(prefers-reduced-motion: reduce)');
 function move(delta){
   let forward = Number(pressed('z','w','arrowup'))-Number(pressed('s','arrowdown'));
   let side = Number(pressed('d'))-Number(pressed('q','a'));
@@ -1052,8 +1151,17 @@ function move(delta){
   camera.yaw+=1.75*delta*(Number(pressed('arrowright'))-Number(pressed('arrowleft')));
   const x = speed*(Math.sin(camera.yaw)*forward+Math.cos(camera.yaw)*side);
   const z = speed*(-Math.cos(camera.yaw)*forward+Math.sin(camera.yaw)*side);
+  const oldX=camera.x,oldZ=camera.z;
   if(clearSpace(camera.x+x,camera.z)) camera.x+=x;
   if(clearSpace(camera.x,camera.z+z)) camera.z+=z;
+  const distance=Math.hypot(camera.x-oldX,camera.z-oldZ);
+  if(distance>.001){
+    const previous=Math.floor(stride/.59);
+    stride+=distance;
+    if(Math.floor(stride/.59)>previous) footstep();
+  }
+  const bob=distance>.001 && !reducedMotion.matches ? .025*Math.sin(stride*Math.PI*2/.59) : 0;
+  eyeHeight+=(1.61+bob-eyeHeight)*Math.min(1,delta*14);
 }
 function relativeAngle(target){
   const angle = Math.atan2(target.x-camera.x,camera.z-target.z)-camera.yaw;
@@ -1064,7 +1172,7 @@ function updateHud(){
   const distance = target => Math.hypot(target.x-camera.x,target.z-camera.z);
   activeTarget = progress.powered ? null : targets.find(target =>
     distance(target)<2 && Math.abs(relativeAngle(target))<.54 &&
-    Math.abs(Math.atan2(target.y-1.61,distance(target))-camera.pitch)<.7);
+    Math.abs(Math.atan2(target.y-eyeHeight,distance(target))-camera.pitch)<.7);
   const action = get('action');
   action.disabled=!activeTarget;
   action.textContent=activeTarget?.name || 'Interagir';
@@ -1134,6 +1242,84 @@ window.addEventListener('keydown',event=>{
 });
 window.addEventListener('keyup',event=>keys.delete(event.key.toLowerCase()));
 window.addEventListener('blur',()=>{keys.clear();resetPad();look=null;});
+let audioContext;
+let ambientGain;
+let ambientOscillator;
+let stepBuffer;
+let soundEnabled=true;
+try{soundEnabled=localStorage.getItem('courant-coupe-sound')!=='off';}catch{}
+function wakeAudio(){
+  if(!soundEnabled) return;
+  const AudioEngine=window.AudioContext || window.webkitAudioContext;
+  if(!AudioEngine) return;
+  try{
+    if(!audioContext){
+      audioContext=new AudioEngine();
+      ambientGain=audioContext.createGain();
+      ambientGain.gain.value=0;
+      ambientGain.connect(audioContext.destination);
+      ambientOscillator=audioContext.createOscillator();
+      ambientOscillator.type='sine';
+      ambientOscillator.connect(ambientGain);
+      ambientOscillator.start();
+      const length=Math.floor(audioContext.sampleRate*.11);
+      stepBuffer=audioContext.createBuffer(1,length,audioContext.sampleRate);
+      const samples=stepBuffer.getChannelData(0);
+      for(let i=0;i<length;i++) samples[i]=(Math.random()*2-1)*Math.pow(1-i/length,2.5);
+    }
+    if(audioContext.state==='suspended') void audioContext.resume().catch(()=>{});
+  }catch{}
+}
+function updateAmbience(){
+  if(!ambientGain) return;
+  const t=audioContext.currentTime;
+  const level=soundEnabled && started && !rotationBlocked && !document.hidden
+    ? progress.energized ? .02 : .008 : 0;
+  ambientOscillator.frequency.setTargetAtTime([83,47,67,55,112][missionIndex],t,.15);
+  ambientGain.gain.setTargetAtTime(level,t,.15);
+}
+function playSound(frequency,duration,volume,type){
+  if(!soundEnabled || audioContext?.state!=='running') return;
+  const t=audioContext.currentTime;
+  const voice=audioContext.createOscillator();
+  const envelope=audioContext.createGain();
+  voice.type=type;
+  voice.frequency.value=frequency;
+  envelope.gain.setValueAtTime(volume,t);
+  envelope.gain.exponentialRampToValueAtTime(.001,t+duration);
+  voice.connect(envelope);
+  envelope.connect(audioContext.destination);
+  voice.start(t);
+  voice.stop(t+duration);
+}
+function footstep(){
+  if(!soundEnabled || !stepBuffer || audioContext.state!=='running') return;
+  const hit=audioContext.createBufferSource();
+  hit.buffer=stepBuffer;
+  const filter=audioContext.createBiquadFilter();
+  filter.type='lowpass';
+  filter.frequency.value=[420,820,310,580,680][missionIndex];
+  const volume=audioContext.createGain();
+  volume.gain.value=.12;
+  hit.connect(filter);
+  filter.connect(volume);
+  volume.connect(audioContext.destination);
+  hit.start();
+}
+const soundButton=get('soundButton');
+function updateSoundButton(){
+  soundButton.setAttribute('aria-pressed',String(soundEnabled));
+  soundButton.textContent='Son';
+  soundButton.setAttribute('aria-label',soundEnabled?'Couper le son':'Activer le son');
+}
+soundButton.onclick=()=>{
+  soundEnabled=!soundEnabled;
+  try{localStorage.setItem('courant-coupe-sound',soundEnabled?'on':'off');}catch{}
+  wakeAudio();
+  updateSoundButton();
+  updateAmbience();
+};
+updateSoundButton();
 get('action').onclick=interact;
 get('help').onclick=()=>openPanel('Commandes','Se déplacer et interagir',
   'Clavier · ZQSD ou WASD pour marcher, flèches gauche/droite ou glissement à la souris pour tourner, E pour interagir. Tactile · joystick pour marcher, glissement dans la scène pour regarder, bouton d’action pour interagir. Suis la flèche pour trouver ton prochain objectif.',[close]);
@@ -1162,6 +1348,7 @@ function updateOrientation(){
   }
   get('rotate').hidden=!blocked;
   get('hud').hidden=!started || blocked;
+  updateAmbience();
 }
 portraitTouch.addEventListener('change',updateOrientation);
 async function requestLandscape(){
@@ -1241,6 +1428,9 @@ function startMission(index,resume=null){
   progress={interview,tests,isolated,secured,checks,work,fixings,fixed,energized,verified:energized && resume?.verified===true,powered:false};
   selectedTool=null;
   poweredAt=undefined;
+  eyeHeight=1.61;
+  stride=0;
+  wakeAudio();
   keys.clear();
   resetPad();
   look=null;
@@ -1271,6 +1461,7 @@ get('continueButton').onclick=()=>{
 window.addEventListener('pagehide',saveProgress);
 document.addEventListener('visibilitychange',()=>{
   if(document.visibilityState==='hidden') saveProgress();
+  updateAmbience();
 });
 progress={powered:false};
 updateHome();
