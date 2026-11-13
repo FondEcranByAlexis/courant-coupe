@@ -1,0 +1,522 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#141714">
+<title>Courant Coupé — FBA Games</title>
+<style>
+:root{color-scheme:dark;font:16px system-ui,sans-serif;--yellow:#ffca62;--ink:#151715;--border:#ffffff26}
+*{box-sizing:border-box}
+body{margin:0;background:#22241f;color:#faf2e5;overflow:hidden}
+[hidden]{display:none!important}
+canvas{position:fixed;inset:0;width:100%;height:100%;touch-action:none}
+button{font:inherit;color:inherit;border:1px solid var(--border);border-radius:9px;padding:.72rem 1rem;background:#2b3029;cursor:pointer}
+button:focus-visible{outline:3px solid #fff;outline-offset:2px}
+.primary{background:var(--yellow);color:#211a0e;font-weight:800;border-color:transparent}
+.overlay{position:fixed;inset:0;display:grid;place-items:center;padding:1rem;background:#0c110eb5}
+.panel{width:min(100%,33rem);max-height:100%;overflow:auto;background:#191e19;border:1px solid var(--border);border-radius:16px;padding:clamp(1.2rem,4vw,2.5rem);box-shadow:0 24px 80px #0008}
+.brand{font-size:.78rem;font-weight:800;letter-spacing:.23em;color:var(--yellow);text-transform:uppercase}
+h1,h2{line-height:1.02;margin:.6rem 0}
+h1{font-size:clamp(2.7rem,9vw,5rem);letter-spacing:-.075em}
+h2{font-size:clamp(1.55rem,5vw,2.5rem);letter-spacing:-.04em}
+p{line-height:1.5;color:#ded9cc}
+small{display:block;color:#bdbdae;line-height:1.45;margin-top:1rem}
+#hud{position:fixed;inset:0;pointer-events:none}
+#top{position:absolute;top:max(.7rem,env(safe-area-inset-top));left:.75rem;right:.75rem;display:flex;justify-content:space-between;align-items:start;gap:.5rem}
+#brief,#help,#action,#stick,#compass{background:#151914ec;border:1px solid var(--border);border-radius:10px}
+#brief{padding:.65rem .8rem;max-width:28rem}
+#goal{display:block;margin-top:.27rem;font-size:clamp(.83rem,2.5vw,1rem)}
+#help,#action,#stick{pointer-events:auto}
+#help{padding:.52rem .7rem}
+#cross{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:8px;height:8px;border:1px solid #fff;border-radius:50%;box-shadow:0 0 5px #000}
+#action{position:absolute;left:50%;bottom:max(1rem,env(safe-area-inset-bottom));transform:translateX(-50%);white-space:nowrap;background:#222419;padding:.68rem .9rem}
+#action:disabled{opacity:.7;cursor:default}
+#stick{display:none;position:absolute;bottom:max(1rem,env(safe-area-inset-bottom));left:1rem;width:76px;height:76px;border-radius:50%;touch-action:none}
+#thumb{position:absolute;top:50%;left:50%;width:32px;height:32px;margin:-16px;border-radius:50%;background:var(--yellow);pointer-events:none}
+#compass{position:absolute;bottom:4.4rem;left:50%;transform:translateX(-50%);padding:.28rem .55rem;font-size:.77rem;white-space:nowrap}
+#choices{display:grid;gap:.5rem}
+#choices button{text-align:left}
+#message{min-height:1.5em;color:var(--yellow);margin:.7rem 0 0}
+dialog{padding:0;border:0;background:none;max-height:calc(100% - 1.2rem);width:min(calc(100% - 1.2rem),33rem);color:inherit}
+dialog::backdrop{background:#080c09b8}
+dialog .panel{max-height:min(85dvh,46rem)}
+@media(pointer:coarse){#stick{display:block}#action{left:auto;right:.8rem;transform:none;max-width:calc(100vw - 108px);overflow:hidden;text-overflow:ellipsis}#compass{bottom:5.6rem}}
+</style>
+</head>
+<body>
+<canvas id="view" aria-label="Boulangerie en 3D"></canvas>
+<div id="hud" hidden>
+  <div id="top"><div id="brief"><div class="brand">Mission 01 · 05 h 42</div><strong id="goal"></strong></div><button id="help" aria-label="Afficher les commandes">?</button></div>
+  <span id="cross"></span><div id="compass"></div>
+  <div id="stick" aria-label="Joystick de déplacement"><div id="thumb"></div></div>
+  <button id="action" disabled>Interagir</button>
+</div>
+<div id="intro" class="overlay">
+  <section class="panel">
+    <div class="brand">FBA Games</div>
+    <h1>Courant Coupé</h1>
+    <p><strong>La première fournée</strong><br>La boulangerie est dans le noir. Le boulanger t’attend près du comptoir et le premier pain doit encore passer au four.</p>
+    <button id="start" class="primary">Entrer dans la boulangerie</button>
+    <small>Mission d’environ 5 min · Clavier ou commandes tactiles</small>
+    <p id="graphicsError" role="alert" hidden>Le rendu 3D est indisponible dans ce navigateur. Essaie un autre navigateur.</p>
+  </section>
+</div>
+<dialog id="dialog"><section class="panel">
+  <div class="brand" id="category"></div><h2 id="title"></h2><p id="description"></p>
+  <div id="choices"></div><p id="message" role="status"></p>
+</section></dialog>
+<script>
+'use strict';
+const get = id => document.getElementById(id);
+const canvas = get('view');
+const gl = canvas.getContext('webgl', {antialias:true, alpha:false});
+const flat = gl ? null : canvas.getContext('2d', {alpha:false});
+const modal = get('dialog');
+const keys = new Set();
+const camera = {x:0, z:2.2, yaw:0, pitch:0};
+const progress = {interview:false, tests:new Set(), isolated:false, fixed:false, powered:false};
+const circuits = ['Éclairage', 'Vitrine', 'Four'];
+const targets = [
+  {id:'client', name:'Parler au boulanger', short:'Boulanger', x:0, y:1.45, z:0.35},
+  {id:'board', name:'Examiner le tableau', short:'Tableau', x:-3.58, y:1.55, z:-2.45},
+  {id:'oven', name:'Examiner le four', short:'Four', x:2.2, y:1.18, z:-3.38}
+];
+let started = false;
+let activeTarget;
+let stage = 'client';
+let movementPad = null;
+let look = null;
+let frameTime = 0;
+
+function objective(id, instruction){
+  stage = id;
+  get('goal').textContent = instruction;
+}
+function openPanel(category, title, description, actions, feedback = ''){
+  keys.clear();
+  resetPad();
+  look = null;
+  get('category').textContent = category;
+  get('title').textContent = title;
+  get('description').textContent = description;
+  get('message').textContent = feedback;
+  const buttons = actions.map(([label, callback, primary]) => {
+    const button = document.createElement('button');
+    button.textContent = label;
+    if(primary) button.className = 'primary';
+    button.onclick = callback;
+    return button;
+  });
+  get('choices').replaceChildren(...buttons);
+  if(!modal.open) modal.showModal();
+  else buttons[0]?.focus();
+}
+const close = ['Retour à la boulangerie', () => modal.close()];
+
+function client(){
+  progress.interview = true;
+  objective('board','Examine le tableau et compare les relevés.');
+  openPanel('Comptoir','Le boulanger','« La vitrine et les lampes marchaient. Dès que j’ai lancé la chauffe du four, tout s’est éteint. »',
+    [['Aller voir le tableau', () => modal.close(), true]]);
+}
+function board(feedback = ''){
+  if(!progress.interview){
+    openPanel('Local technique','Tableau électrique','Trois circuits desservent la boulangerie. Le boulanger peut te dire ce qui se passait au moment de la coupure.',[close]);
+    return;
+  }
+  if(progress.fixed){
+    openPanel('Local technique','Contrôle final','Le module du four a été remplacé. Il reste à remettre l’installation en service.',
+      [['Remettre le courant', restore, true], close]);
+    return;
+  }
+  if(progress.isolated){
+    openPanel('Local technique','Circuit du four isolé','Le four est prêt pour la réparation dans la simulation.',[close]);
+    return;
+  }
+  const actions = circuits.map(circuit => [
+    progress.tests.has(circuit) ? circuit + ' · relevé effectué' : 'Relever l’état du circuit ' + circuit.toLowerCase(),
+    () => {
+      progress.tests.add(circuit);
+      board(circuit === 'Four' ? 'Four · le simulateur détecte un défaut sur le module de chauffe.' : circuit + ' · aucun défaut détecté.');
+    }
+  ]);
+  if(progress.tests.size === circuits.length){
+    actions.push(...circuits.map(circuit => ['Isoler le circuit ' + circuit.toLowerCase(), () => {
+      if(circuit !== 'Four'){
+        board('Ce circuit ne présente aucun défaut. Relis les relevés et le témoignage.');
+        return;
+      }
+      progress.isolated = true;
+      objective('oven','Va au four et remplace son module défectueux.');
+      board();
+    }]));
+  }
+  openPanel('Local technique','Tableau électrique','Compare les trois relevés du simulateur pour identifier le circuit en défaut.',[...actions,close],feedback);
+}
+function oven(){
+  if(!progress.isolated){
+    openPanel('Fournil','Four de cuisson','Le four s’est arrêté avant la première fournée. Vérifie les circuits au tableau.',[close]);
+    return;
+  }
+  if(progress.fixed){
+    openPanel('Fournil','Module remplacé','Retourne au tableau pour remettre la boulangerie en service.',[close]);
+    return;
+  }
+  openPanel('Fournil','Module de chauffe','Le diagnostic du jeu confirme un module de chauffe défectueux.',[
+    ['Remplacer le module', () => {
+      progress.fixed = true;
+      objective('board','Retourne au tableau pour remettre le courant.');
+      oven();
+    },true], close]);
+}
+function restore(){
+  if(progress.powered) return;
+  progress.powered = true;
+  objective(null,'Courant rétabli · mission réussie');
+  modal.close();
+  setTimeout(() => {
+    openPanel('Mission réussie','La fournée est sauvée','Les lampes, la vitrine et le four ont repris du service. Le boulanger peut lancer sa première fournée.',
+      [['Rejouer la mission', () => location.reload(), true],close]);
+  }, 1150);
+}
+function interact(){
+  if(!activeTarget || modal.open || progress.powered) return;
+  if(activeTarget.id === 'client'){
+    if(progress.interview) openPanel('Comptoir','Le boulanger','« Tout a sauté quand j’ai lancé la chauffe du four. »',[close]);
+    else client();
+  }
+  if(activeTarget.id === 'board') board();
+  if(activeTarget.id === 'oven') oven();
+}
+
+const boxes = [];
+const colliders = [];
+function box(x,y,z,w,h,d,color,{solid=false,glow=false}={}){
+  boxes.push({x,y,z,w,h,d,color,glow});
+  if(solid) colliders.push({x,z,w,d});
+}
+function createBakery(){
+  box(0,-.08,0,8,.16,9,'#5d5142');
+  for(let x=-3.5;x<4;x+=1){
+    for(let z=-4;z<4.5;z+=1){
+      box(x,.003,z,.982,.006,.982,(x+z+.5)%2===0?'#85745c':'#746651');
+    }
+  }
+  box(0,3.14,0,8,.17,9,'#c2b49a');
+  box(-4,1.5,0,.24,3,9,'#9d9275');
+  box(4,1.5,0,.24,3,9,'#aa9979');
+  box(0,1.5,-4.5,8,3,.24,'#a89b81');
+  box(0,1.5,4.5,8,3,.24,'#8b7d67');
+  for(let x of [-3,0,3]){
+    box(x,1.6,4.35,2.3,1.9,.04,'#597279');
+    box(x,1.6,4.31,.055,1.9,.04,'#473d36');
+    box(x,1.6,4.31,2.3,.055,.04,'#473d36');
+  }
+  for(let z of [-2.6,0,2.6]){
+    box(0,2.98,z,1.65,.09,.32,'#fff0bb',{glow:true});
+  }
+  box(0,.52,1.02,2.45,1.04,.65,'#814c30',{solid:true});
+  box(0,1.07,1.02,2.57,.12,.77,'#aa6a42');
+  box(-.77,1.2,1,.34,.22,.29,'#443a30');
+  box(0,.79,.35,.38,.42,.28,'#443b36',{solid:true});
+  box(0,1.18,.35,.49,.48,.28,'#c1b19a');
+  box(0,1.56,.35,.24,.25,.23,'#be8668');
+  box(0,1.71,.35,.27,.08,.26,'#e0d3b9');
+  for(let x of [-.31,.31]) box(x,1.17,.35,.13,.4,.15,'#b5a48a');
+  box(3.15,.49,1,1.14,.98,2.1,'#5a3826',{solid:true});
+  box(3.15,1.03,1,1.2,.09,2.17,'#a57d54');
+  for(let z of [.3,.77,1.24,1.71]){
+    box(3.08,1.15,z,.56,.19,.28,'#b97839');
+    box(3.08,1.25,z,.27,.024,.039,'#dfab65');
+  }
+  box(2.2,1,-3.92,1.5,2,1.05,'#535a58',{solid:true});
+  box(2.2,1.15,-3.377,1.24,.89,.035,'#2e3937');
+  box(2.2,1.52,-3.335,.98,.065,.065,'#969a87');
+  box(2.2,1.83,-3.374,.38,.11,.042,'#bd7750');
+  box(-3.81,1.54,-2.45,.27,.81,1.02,'#636a61');
+  for(let z of [-2.74,-2.45,-2.16]){
+    box(-3.665,1.52,z,.04,.28,.18,'#d9d7c2');
+    box(-3.64,1.55,z,.043,.08,.11,'#432d25');
+  }
+  box(-2.02,.45,-4.01,2.14,.9,.74,'#625342',{solid:true});
+  box(-2.02,.94,-4.01,2.24,.1,.8,'#8d7962');
+  box(-3.15,.68,2.82,.73,1.36,.68,'#604e39',{solid:true});
+  box(-3.15,1.4,2.82,.84,.12,.77,'#897257');
+}
+createBakery();
+
+function shader(type, code){
+  const result = gl.createShader(type);
+  gl.shaderSource(result,code);
+  gl.compileShader(result);
+  if(!gl.getShaderParameter(result,gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(result));
+  return result;
+}
+let locations;
+function setupGraphics(){
+  const program = gl.createProgram();
+  gl.attachShader(program,shader(gl.VERTEX_SHADER,`
+    attribute vec3 aVertex;
+    attribute float aShade;
+    uniform vec3 uPosition, uSize, uCamera;
+    uniform vec2 uYaw, uPitch, uProjection;
+    varying float vShade, vDepth;
+    void main(){
+      vec3 p = aVertex*uSize+uPosition-uCamera;
+      float x = p.x*uYaw.x+p.z*uYaw.y;
+      float front = p.x*uYaw.y-p.z*uYaw.x;
+      float y = p.y*uPitch.x-front*uPitch.y;
+      float depth = p.y*uPitch.y+front*uPitch.x;
+      gl_Position = vec4(x*uProjection.x,y*uProjection.y,1.004*depth-.16,depth);
+      vShade=aShade;
+      vDepth=depth;
+    }`));
+  gl.attachShader(program,shader(gl.FRAGMENT_SHADER,`
+    precision mediump float;
+    uniform vec3 uColor;
+    uniform float uLight, uGlow;
+    varying float vShade, vDepth;
+    void main(){
+      float brightness = mix(.54 + .19 / (1. + vDepth*.18),1.08,uLight);
+      vec3 color = uColor * mix(vShade*brightness,1.22,uGlow*uLight);
+      gl_FragColor=vec4(mix(color,vec3(.15,.15,.12),smoothstep(7.,16.,vDepth)*.5),1.);
+    }`));
+  gl.linkProgram(program);
+  if(!gl.getProgramParameter(program,gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(program));
+  gl.useProgram(program);
+  const vertices = [];
+  function face(corners,shade){
+    for(const i of [0,1,2,0,2,3]) vertices.push(...corners[i].map(v => v/2),shade);
+  }
+  face([[-1,-1,1],[1,-1,1],[1,1,1],[-1,1,1]],.87);
+  face([[1,-1,-1],[-1,-1,-1],[-1,1,-1],[1,1,-1]],.78);
+  face([[-1,-1,-1],[-1,-1,1],[-1,1,1],[-1,1,-1]],.72);
+  face([[1,-1,1],[1,-1,-1],[1,1,-1],[1,1,1]],.82);
+  face([[-1,1,1],[1,1,1],[1,1,-1],[-1,1,-1]],1);
+  face([[-1,-1,-1],[1,-1,-1],[1,-1,1],[-1,-1,1]],.7);
+  gl.bindBuffer(gl.ARRAY_BUFFER,gl.createBuffer());
+  gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(vertices),gl.STATIC_DRAW);
+  const point = gl.getAttribLocation(program,'aVertex');
+  const shade = gl.getAttribLocation(program,'aShade');
+  gl.enableVertexAttribArray(point);
+  gl.enableVertexAttribArray(shade);
+  gl.vertexAttribPointer(point,3,gl.FLOAT,false,16,0);
+  gl.vertexAttribPointer(shade,1,gl.FLOAT,false,16,12);
+  gl.enable(gl.DEPTH_TEST);
+  locations = Object.fromEntries(['Position','Size','Camera','Yaw','Pitch','Projection','Color','Light','Glow']
+    .map(name => [name,gl.getUniformLocation(program,'u'+name)]));
+}
+for(const object of boxes){
+  object.rgb = object.color.slice(1).match(/../g).map(pair => parseInt(pair,16)/255);
+}
+function renderWebGL(now){
+  const scale = Math.min(window.devicePixelRatio || 1, 1.65);
+  const width = Math.round(canvas.clientWidth*scale);
+  const height = Math.round(canvas.clientHeight*scale);
+  if(canvas.width!==width || canvas.height!==height){
+    canvas.width=width;
+    canvas.height=height;
+    gl.viewport(0,0,width,height);
+  }
+  const sy = Math.sin(camera.yaw);
+  const cy = Math.cos(camera.yaw);
+  const focal = Math.min(1.55,1.14*width/height);
+  const light = progress.powered ? Math.min(1, (now-poweredAt)/850) : 0;
+  gl.clearColor(.16,.16,.14,1);
+  gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
+  gl.uniform3f(locations.Camera,camera.x,1.61,camera.z);
+  gl.uniform2f(locations.Yaw,cy,sy);
+  gl.uniform2f(locations.Pitch,Math.cos(camera.pitch),Math.sin(camera.pitch));
+  gl.uniform2f(locations.Projection,focal*height/width,focal);
+  gl.uniform1f(locations.Light,light);
+  for(const object of boxes){
+    gl.uniform3f(locations.Position,object.x,object.y,object.z);
+    gl.uniform3f(locations.Size,object.w,object.h,object.d);
+    gl.uniform3fv(locations.Color,object.rgb);
+    gl.uniform1f(locations.Glow,Number(object.glow));
+    gl.drawArrays(gl.TRIANGLES,0,36);
+  }
+}
+const faces = [
+  [[0,1,2,3],.87], [[5,4,7,6],.78], [[4,0,3,7],.72],
+  [[1,5,6,2],.82], [[3,2,6,7],1], [[4,5,1,0],.7]
+];
+const corners = [[-1,-1,1],[1,-1,1],[1,1,1],[-1,1,1],
+  [-1,-1,-1],[1,-1,-1],[1,1,-1],[-1,1,-1]];
+function clipFace(points){
+  const visible = [];
+  for(let i=0;i<points.length;i++){
+    const a=points[i];
+    const b=points[(i+1)%points.length];
+    if(a[2]>=.08) visible.push(a);
+    if((a[2]>=.08)!==(b[2]>=.08)){
+      const t=(.08-a[2])/(b[2]-a[2]);
+      visible.push([a[0]+t*(b[0]-a[0]),a[1]+t*(b[1]-a[1]),.08]);
+    }
+  }
+  return visible;
+}
+function renderCanvas(now){
+  const width=canvas.clientWidth;
+  const height=canvas.clientHeight;
+  if(canvas.width!==width || canvas.height!==height){
+    canvas.width=width;
+    canvas.height=height;
+  }
+  flat.fillStyle='#282820';
+  flat.fillRect(0,0,width,height);
+  const sy=Math.sin(camera.yaw), cy=Math.cos(camera.yaw);
+  const sp=Math.sin(camera.pitch), cp=Math.cos(camera.pitch);
+  const focal=Math.min(1.55*height,1.14*width)/2;
+  const light=progress.powered?Math.min(1,(now-poweredAt)/850):0;
+  const surfaces=[];
+  for(const object of boxes){
+    const vertices=corners.map(([vx,vy,vz])=>{
+      const x=object.x+vx*object.w/2-camera.x;
+      const y=object.y+vy*object.h/2-1.61;
+      const z=object.z+vz*object.d/2-camera.z;
+      const front=x*sy-z*cy;
+      return [x*cy+z*sy,y*cp-front*sp,y*sp+front*cp];
+    });
+    for(const [indices,shade] of faces){
+      const points=clipFace(indices.map(i=>vertices[i]));
+      if(points.length<3) continue;
+      const projected=points.map(([x,y,d])=>[width/2+x*focal/d,height/2-y*focal/d]);
+      const area=projected.reduce((sum,[x,y],i)=>{
+        const next=projected[(i+1)%projected.length];
+        return sum+x*next[1]-y*next[0];
+      },0);
+      if(area>=0) continue;
+      const depth=points.reduce((sum,p)=>sum+p[2],0)/points.length;
+      const brightness=object.glow ? shade*.65*(1-light)+light*1.22 : shade*(.55+.15/(1+depth*.18)+light*.4);
+      surfaces.push({projected,depth,color:'rgb('+object.rgb.map(value=>Math.round(value*brightness*255)).join(',')+')'});
+    }
+  }
+  surfaces.sort((a,b)=>b.depth-a.depth);
+  for(const {projected,color} of surfaces){
+    flat.beginPath();
+    flat.moveTo(...projected[0]);
+    for(const point of projected.slice(1)) flat.lineTo(...point);
+    flat.closePath();
+    flat.fillStyle=color;
+    flat.fill();
+  }
+}
+let poweredAt;
+function clearSpace(x,z){
+  return Math.abs(x)<3.65 && Math.abs(z)<4.17 && colliders.every(object =>
+    Math.abs(x-object.x)>object.w/2+.23 || Math.abs(z-object.z)>object.d/2+.23);
+}
+const pressed = (...names) => names.some(name => keys.has(name));
+function move(delta){
+  let forward = Number(pressed('z','w','arrowup'))-Number(pressed('s','arrowdown'));
+  let side = Number(pressed('d'))-Number(pressed('q','a'));
+  if(movementPad){forward-=movementPad.y;side+=movementPad.x;}
+  const speed = 2.15*delta/Math.max(1,Math.hypot(forward,side));
+  camera.yaw+=1.75*delta*(Number(pressed('arrowright'))-Number(pressed('arrowleft')));
+  const x = speed*(Math.sin(camera.yaw)*forward+Math.cos(camera.yaw)*side);
+  const z = speed*(-Math.cos(camera.yaw)*forward+Math.sin(camera.yaw)*side);
+  if(clearSpace(camera.x+x,camera.z)) camera.x+=x;
+  if(clearSpace(camera.x,camera.z+z)) camera.z+=z;
+}
+function relativeAngle(target){
+  const angle = Math.atan2(target.x-camera.x,camera.z-target.z)-camera.yaw;
+  return Math.atan2(Math.sin(angle),Math.cos(angle));
+}
+function updateHud(){
+  const goal = targets.find(target => target.id===stage);
+  const distance = target => Math.hypot(target.x-camera.x,target.z-camera.z);
+  activeTarget = progress.powered ? null : targets.find(target =>
+    distance(target)<2 && Math.abs(relativeAngle(target))<.54 &&
+    Math.abs(Math.atan2(target.y-1.61,distance(target))-camera.pitch)<.7);
+  const action = get('action');
+  action.disabled=!activeTarget;
+  action.textContent=activeTarget?.name || 'Interagir';
+  get('cross').style.background=activeTarget?'#ffca62':'transparent';
+  get('compass').hidden=!goal;
+  if(goal){
+    const angle = relativeAngle(goal);
+    const arrow = Math.abs(angle)<.38?'↑':angle>0?'→':'←';
+    get('compass').textContent=arrow+' '+goal.short+' · '+Math.max(1,Math.round(distance(goal)))+' m';
+  }
+}
+function frame(now){
+  const delta = Math.min(.05,(now-frameTime)/1000);
+  frameTime=now;
+  if(progress.powered && poweredAt===undefined) poweredAt=now;
+  if(started && !modal.open){move(delta);updateHud();}
+  if(gl) renderWebGL(now);
+  else renderCanvas(now);
+  requestAnimationFrame(frame);
+}
+function resetPad(){
+  movementPad=null;
+  get('thumb').style.transform='';
+}
+function padPosition(event){
+  const rect=get('stick').getBoundingClientRect();
+  const x=(event.clientX-rect.left-rect.width/2)/26;
+  const y=(event.clientY-rect.top-rect.height/2)/26;
+  const scale=Math.max(1,Math.hypot(x,y));
+  movementPad.x=x/scale;
+  movementPad.y=y/scale;
+  get('thumb').style.transform='translate('+movementPad.x*25+'px,'+movementPad.y*25+'px)';
+}
+const pad=get('stick');
+pad.onpointerdown=event=>{
+  if(movementPad) return;
+  movementPad={id:event.pointerId,x:0,y:0};
+  pad.setPointerCapture(event.pointerId);
+  padPosition(event);
+};
+pad.onpointermove=event=>{if(movementPad?.id===event.pointerId) padPosition(event);};
+pad.onlostpointercapture=event=>{if(movementPad?.id===event.pointerId) resetPad();};
+canvas.onpointerdown=event=>{
+  if(!started || modal.open || look || event.button!==0) return;
+  look={id:event.pointerId,x:event.clientX,y:event.clientY};
+  canvas.setPointerCapture(event.pointerId);
+};
+canvas.onpointermove=event=>{
+  if(look?.id!==event.pointerId) return;
+  camera.yaw+=(event.clientX-look.x)*.006;
+  camera.pitch=Math.max(-.75,Math.min(.75,camera.pitch-(event.clientY-look.y)*.005));
+  look.x=event.clientX;
+  look.y=event.clientY;
+};
+canvas.onlostpointercapture=event=>{if(look?.id===event.pointerId) look=null;};
+window.addEventListener('keydown',event=>{
+  if(!started || modal.open || event.altKey || event.ctrlKey || event.metaKey) return;
+  const key=event.key.toLowerCase();
+  if(key==='e'){
+    if(!event.repeat) interact();
+    return;
+  }
+  if(['z','w','s','a','q','d','arrowup','arrowdown','arrowleft','arrowright'].includes(key)){
+    event.preventDefault();
+    keys.add(key);
+  }
+});
+window.addEventListener('keyup',event=>keys.delete(event.key.toLowerCase()));
+window.addEventListener('blur',()=>{keys.clear();resetPad();look=null;});
+get('action').onclick=interact;
+get('help').onclick=()=>openPanel('Commandes','Se déplacer et interagir',
+  'Clavier · ZQSD ou WASD pour marcher, flèches gauche/droite ou glissement à la souris pour tourner, E pour interagir. Tactile · joystick pour marcher, glissement dans la scène pour regarder, bouton d’action pour interagir. Suis la flèche pour trouver ton prochain objectif.',[close]);
+get('start').onclick=()=>{
+  started=true;
+  get('intro').hidden=true;
+  get('hud').hidden=false;
+  objective('client','Parle au boulanger près du comptoir.');
+};
+try{
+  if(!gl && !flat) throw new Error('Canvas indisponible');
+  if(gl) setupGraphics();
+  requestAnimationFrame(frame);
+}catch(error){
+  console.error(error);
+  get('graphicsError').hidden=false;
+  get('start').disabled=true;
+}
+</script>
+</body>
+</html>
