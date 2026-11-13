@@ -485,11 +485,6 @@ function client(){
   openPanel(mission.place,mission.client[0].toUpperCase()+mission.client.slice(1),'« '+mission.report+' »',
     [['Reprendre la mission', () => modal.close(), true]]);
 }
-const bakeryReadings=[
-  {volts:230,state:'Enclenché',note:'La protection est enclenchée et le départ répond.'},
-  {volts:231,state:'Enclenché',note:'La protection est enclenchée et la vitrine reste alimentée.'},
-  {volts:0,state:'Déclenché',note:'Le départ a déclenché au lancement de la chauffe. La mesure indique une coupure en sortie.'}
-];
 let meterInHand=false;
 let selectedProbe=null;
 const probeContacts={black:null,red:null};
@@ -510,7 +505,18 @@ function isolateCircuit(index){
   updateObjective();
   board();
 }
-function bakeryBoard(feedback){
+function interactiveBoard(feedback){
+  const faultCircuit=mission.circuits[mission.fault];
+  const readings=mission.circuits.map((_,index)=>{
+    const isFault=index===mission.fault;
+    const tripped=isFault && missionIndex===0;
+    return {
+      volts:tripped?0:230,
+      position:tripped?'trip':'on',
+      note:isFault ? procedures[missionIndex].panel
+        : 'Protection enclenchée. Alimentation présente sur le départ.'
+    };
+  });
   const phase=progress.energized?'running':progress.fixed?'restore':progress.isolated?'isolated':'diagnose';
   const diagnostic=get('diagnostic');
   const meter=get('meterMode');
@@ -518,12 +524,12 @@ function bakeryBoard(feedback){
   const notebook=get('notebook');
   const complete=progress.tests.size===mission.circuits.length;
   const prompts={
-    diagnose:complete?'Range le voltmètre, puis abaisse la manette du départ à isoler.'
+    diagnose:complete?'Compare les relevés au témoignage dans le carnet. Range le voltmètre, puis abaisse la manette du départ à isoler.'
       :'Sur le banc de test simulé, place les deux pointes sur les deux contacts du même départ.',
-    isolated:progress.secured?'Le départ du four est à l’arrêt et sécurisé dans la simulation.'
-      :'La manette du four est à l’arrêt. Confirme la mise en sécurité simulée.',
-    restore:'Le four est réparé. Remonte sa manette de O vers I, puis retourne au four pour l’essai.',
-    running:'Le départ du four est en marche. Consulte ton objectif pour terminer l’intervention.'
+    isolated:progress.secured?'Départ « '+faultCircuit+' » à l’arrêt et sécurisé dans la simulation.'
+      :'La manette « '+faultCircuit+' » est à l’arrêt. Confirme la mise en sécurité simulée.',
+    restore:'Remonte la manette « '+faultCircuit+' » de O vers I, puis retourne à l’équipement pour l’essai.',
+    running:'Départ « '+faultCircuit+' » en marche. Consulte ton objectif pour terminer l’intervention.'
   };
   const actions=phase==='isolated' && !progress.secured ? [['Consigner et vérifier la mise hors tension',()=>{
     progress.secured=true;
@@ -540,7 +546,7 @@ function bakeryBoard(feedback){
   meter.onclick=()=>{
     meterInHand=!meterInHand;
     resetProbes();
-    bakeryBoard();
+    interactiveBoard();
     meter.focus();
   };
   function updateProbes(){
@@ -563,15 +569,15 @@ function bakeryBoard(feedback){
     selectedProbe=null;
     if(!previous || previous.index!==index){
       display.textContent='— V simulés';
-      bakeryBoard(previous?'Place les deux pointes sur le même départ.':'Place la seconde pointe sur l’autre contact.');
+      interactiveBoard(previous?'Place les deux pointes sur le même départ.':'Place la seconde pointe sur l’autre contact.');
       get(other+'Probe').focus();
       return;
     }
     progress.tests.add(index);
     saveProgress();
-    display.textContent=mission.circuits[index]+' · '+bakeryReadings[index].volts+' V simulés';
+    display.textContent=mission.circuits[index]+' · '+readings[index].volts+' V simulés';
     playSound(670,.08,.026,'sine');
-    bakeryBoard();
+    interactiveBoard();
     if(progress.tests.size===mission.circuits.length){
       notebook.open=true;
       meter.focus();
@@ -607,8 +613,8 @@ function bakeryBoard(feedback){
   }
   updateProbes();
   const cards=mission.circuits.map((circuit,index)=>{
-    const isOven=index===mission.fault;
-    const position=!isOven || phase==='running'?'on':phase==='diagnose'?'trip':'off';
+    const isFault=index===mission.fault;
+    const position=phase==='diagnose'?readings[index].position:!isFault || phase==='running'?'on':'off';
     const positionLabel={on:'I · Marche',trip:'Déclenché',off:'O · Arrêt'}[position];
     const card=document.createElement('div');
     card.className='circuit-card';
@@ -630,7 +636,7 @@ function bakeryBoard(feedback){
     slot.setAttribute('aria-hidden','true');
     slot.appendChild(thumb);
     lever.appendChild(slot);
-    const raising=phase==='restore' && isOven;
+    const raising=phase==='restore' && isFault;
     const rest={on:0,trip:50,off:100}[position];
     lever.setAttribute('aria-label',circuit+' · '+positionLabel+' · '+(raising?'Remonter la manette':'Abaisser la manette'));
     lever.disabled=!raising && (phase!=='diagnose' || !complete || meterInHand);
@@ -642,7 +648,7 @@ function bakeryBoard(feedback){
     function toggleLever(){
       if(raising) energizeCircuit();
       else{
-        if(isOven) playSound(138,.09,.048,'triangle');
+        if(isFault) playSound(138,.09,.048,'triangle');
         isolateCircuit(index);
       }
     }
@@ -695,7 +701,7 @@ function bakeryBoard(feedback){
   get('notebookReport').textContent='« '+mission.report+' »';
   const notes=[...progress.tests].sort().map(index=>{
     const item=document.createElement('li');
-    const data=bakeryReadings[index];
+    const data=readings[index];
     item.textContent=mission.circuits[index]+' · '+data.volts+' V simulés. '+data.note;
     return item;
   });
@@ -709,53 +715,11 @@ function energizeCircuit(){
   modal.close();
 }
 function board(feedback = ''){
-  const procedure=procedures[missionIndex];
   if(!progress.interview){
     openPanel(mission.place,'Tableau électrique','Interroge la personne sur place avant de commencer le diagnostic.',[close]);
     return;
   }
-  if(missionIndex===0){
-    bakeryBoard(feedback);
-    return;
-  }
-  if(progress.energized){
-    openPanel(mission.place,'Circuit en service','Consulte ton objectif pour terminer l’intervention.',[close]);
-    return;
-  }
-  if(progress.fixed){
-    openPanel(mission.place,'Remise en service','L’équipement est refermé. Remets le circuit en service pour passer à l’essai.',
-      [['Remettre le circuit en service',energizeCircuit,true],close]);
-    return;
-  }
-  if(progress.isolated){
-    if(progress.secured){
-      openPanel(mission.place,'Circuit sécurisé','La mise hors tension est confirmée dans la simulation.',[close]);
-      return;
-    }
-    openPanel(mission.place,'Mise en sécurité','Le circuit est isolé. Le contrôle de sécurité est simulé avant toute intervention.',
-      [['Consigner et vérifier la mise hors tension',()=>{
-        progress.secured=true;
-        updateObjective();
-        board();
-      },true],close]);
-    return;
-  }
-  const readings=mission.circuits.map((circuit,index)=>circuit+' · '+(index===mission.fault
-    ? procedure.panel : 'Protection enclenchée. Fonctionnement normal.'));
-  const actions=mission.circuits.flatMap((circuit,index)=>progress.tests.has(index) ? [] : [
-    ['Relever le circuit '+circuit.toLowerCase(),()=>{
-      progress.tests.add(index);
-      saveProgress();
-      board();
-    }]
-  ]);
-  if(progress.tests.size===mission.circuits.length){
-    actions.push(...mission.circuits.map((circuit,index)=>
-      ['Isoler le circuit '+circuit.toLowerCase(),()=>isolateCircuit(index)]));
-  }
-  const notes=[...progress.tests].sort().map(index=>readings[index]);
-  openPanel(mission.place,'Tableau électrique',
-    ['Compare les trois départs avec le témoignage.',...notes].join('\n'),[...actions,close],feedback);
+  interactiveBoard(feedback);
 }
 // Pointer capture keeps a gesture active after the pointer leaves the part.
 function bindGesture(button,{start,move,end,cancel,keyboard}){
