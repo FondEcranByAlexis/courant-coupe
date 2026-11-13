@@ -56,6 +56,18 @@ small{display:block;color:#bdbdae;line-height:1.45;margin-top:1rem}
 #notebook li{margin:.28rem 0}
 #notebook p{margin:.35rem 0}
 @media(max-width:390px) and (orientation:portrait){#circuitRows{grid-template-columns:1fr}}
+#diagnostic .probe-tray,#diagnostic .test-pair{display:flex;gap:.35rem;flex-wrap:wrap}
+#diagnostic .probe{min-height:44px;touch-action:none;cursor:grab;padding:.35rem .55rem}
+.probe.black{background:#171b19}.probe.red{background:#713b36}
+#probeTip{position:fixed;z-index:12;pointer-events:none;width:10px;height:34px;border:1px solid #d6dcd5;border-radius:5px 5px 2px 2px;transform:translate(-50%,-100%);background:#191e1a}
+#probeTip.red{background:#b54f44}
+.probe[aria-pressed=true]{outline:2px solid var(--yellow)}
+.test-pair button{flex:1;border-radius:50px;background:#202522}
+.test-pair button[data-probe=black]{box-shadow:inset 0 0 0 2px #aeb9af;background:#121514}
+.test-pair button[data-probe=red]{box-shadow:inset 0 0 0 2px #ed8e7c;background:#713b36}
+#diagnostic .breaker-lever{touch-action:none;border:1px solid #8e9b92;background:linear-gradient(#808d82 0 32%,#222923 34% 65%,#4b5650 67%);color:white}
+#diagnostic .breaker-lever:disabled{opacity:.55}
+#diagnostic .breaker-lever[data-pulled=true]{background:linear-gradient(#555e58 0 44%,#202521 46% 73%,#8b988e 75%)}
 #workbench{display:grid;gap:.55rem;margin:.65rem 0}
 #toolbox{display:flex;flex-wrap:wrap;gap:.4rem}
 #toolbox button{font-size:.86rem;padding:.5rem .65rem;min-height:44px}
@@ -196,6 +208,11 @@ dialog .panel{max-height:min(85dvh,46rem)}
       <button id="meterMode" type="button" aria-pressed="false">Prendre le voltmètre</button>
       <output id="meterDisplay" aria-live="polite">— V simulés</output>
     </div>
+    <div id="probeTray" class="probe-tray" hidden aria-label="Pointes du voltmètre">
+      <button id="blackProbe" type="button" class="probe black" aria-pressed="false">Pointe noire</button>
+      <button id="redProbe" type="button" class="probe red" aria-pressed="false">Pointe rouge</button>
+    </div>
+    <span id="probeTip" hidden aria-hidden="true"></span>
     <div id="circuitRows"></div>
     <details id="notebook">
       <summary>Carnet d’intervention</summary>
@@ -410,6 +427,7 @@ function openPanel(category, title, description, actions, feedback = ''){
   look = null;
   get('workbench').hidden=true;
   get('diagnostic').hidden=true;
+  get('probeTip').hidden=true;
   get('category').textContent = category;
   get('title').textContent = title;
   get('description').textContent = description;
@@ -457,6 +475,16 @@ const bakeryReadings=[
   {volts:0,state:'Déclenché',note:'Le départ a déclenché au lancement de la chauffe. La mesure indique une coupure en sortie.'}
 ];
 let meterInHand=false;
+let selectedProbe=null;
+const probeContacts={black:null,red:null};
+function resetProbes(){
+  selectedProbe=null;
+  probeContacts.black=null;
+  probeContacts.red=null;
+  get('probeTip').hidden=true;
+}
+const probeNames={black:'Pointe noire',red:'Pointe rouge'};
+
 function isolateCircuit(index){
   if(index!==mission.fault){
     board('Ce départ alimente un équipement qui fonctionne. Compare les relevés au témoignage.');
@@ -472,21 +500,84 @@ function bakeryBoard(feedback){
   const display=get('meterDisplay');
   const notebook=get('notebook');
   const complete=progress.tests.size===mission.circuits.length;
-  const actions=complete?mission.circuits.map((circuit,index)=>
-    ['Isoler le circuit '+circuit.toLowerCase(),()=>isolateCircuit(index)]):[];
   openPanel(mission.place,'Tableau électrique',
-    complete?'Compare les mesures dans le carnet, puis choisis le départ à isoler.'
-      :'Observe les voyants. Prends le voltmètre et touche les points de test de cette simulation.',
-    [...actions,close],feedback);
+    complete?'Range le voltmètre, puis fais glisser vers le bas la manette du départ à isoler.'
+      :'Sur le banc de test simulé, place les deux pointes sur les deux contacts du même départ.',
+    [close],feedback);
   diagnostic.hidden=false;
+  get('probeTray').hidden=!meterInHand;
   meter.setAttribute('aria-pressed',String(meterInHand));
-  meter.textContent=meterInHand?'Voltmètre en main':'Prendre le voltmètre';
+  meter.textContent=meterInHand?'Ranger le voltmètre':'Prendre le voltmètre';
   if(!meterInHand) display.textContent='— V simulés';
   meter.onclick=()=>{
     meterInHand=!meterInHand;
+    resetProbes();
     bakeryBoard();
     meter.focus();
   };
+  function updateProbes(){
+    for(const color of Object.keys(probeNames)){
+      const button=get(color+'Probe');
+      button.setAttribute('aria-pressed',String(selectedProbe===color));
+      const position=probeContacts[color];
+      button.textContent=probeNames[color]+(position?' · '+mission.circuits[position.index]:'');
+    }
+  }
+  function placeProbe(color,index,point){
+    if(!meterInHand) return;
+    const other=color==='black'?'red':'black';
+    const previous=probeContacts[other];
+    if(previous?.index===index && previous.point===point){
+      get('message').textContent='Les pointes doivent être sur deux contacts distincts.';
+      return;
+    }
+    probeContacts[color]={index,point};
+    selectedProbe=null;
+    if(!previous || previous.index!==index){
+      display.textContent='— V simulés';
+      bakeryBoard(previous?'Place les deux pointes sur le même départ.':'Place la seconde pointe sur l’autre contact.');
+      get(other+'Probe').focus();
+      return;
+    }
+    progress.tests.add(index);
+    saveProgress();
+    display.textContent=mission.circuits[index]+' · '+bakeryReadings[index].volts+' V simulés';
+    playSound(670,.08,.026,'sine');
+    bakeryBoard();
+    if(progress.tests.size===mission.circuits.length){
+      notebook.open=true;
+      meter.focus();
+    }else get('blackProbe').focus();
+  }
+  const tip=get('probeTip');
+  for(const color of Object.keys(probeNames)){
+    const button=get(color+'Probe');
+    bindGesture(button,{
+      start:()=>meterInHand,
+      move:event=>{
+        tip.hidden=false;
+        tip.className=color;
+        tip.style.left=event.clientX+'px';
+        tip.style.top=event.clientY+'px';
+      },
+      end:event=>{
+        tip.hidden=true;
+        const contact=document.elementFromPoint(event.clientX,event.clientY)?.closest('[data-contact]');
+        if(contact){
+          placeProbe(color,Number(contact.dataset.circuit),Number(contact.dataset.contact));
+          return;
+        }
+        selectedProbe=color;
+        updateProbes();
+      },
+      cancel:()=>{tip.hidden=true;},
+      keyboard:()=>{
+        selectedProbe=color;
+        updateProbes();
+      }
+    });
+  }
+  updateProbes();
   const cards=mission.circuits.map((circuit,index)=>{
     const data=bakeryReadings[index];
     const card=document.createElement('div');
@@ -494,29 +585,50 @@ function bakeryBoard(feedback){
     const title=document.createElement('strong');
     const state=document.createElement('small');
     const light=document.createElement('span');
-    const test=document.createElement('button');
     title.textContent=circuit;
     light.className=index===mission.fault?'circuit-light trip':'circuit-light';
     light.setAttribute('aria-hidden','true');
     state.append(light,document.createTextNode(data.state));
-    test.type='button';
-    test.textContent=progress.tests.has(index)?data.volts+' V simulés':'Point de test';
-    test.setAttribute('aria-label','Mesurer le départ '+circuit.toLowerCase());
-    test.onclick=()=>{
-      if(!meterInHand){
-        get('message').textContent='Prends le voltmètre avant de toucher un point de test.';
-        return;
+    const lever=document.createElement('button');
+    lever.className='breaker-lever';
+    lever.type='button';
+    lever.textContent='Manette';
+    lever.setAttribute('aria-label','Abaisser la manette du départ '+circuit.toLowerCase());
+    lever.disabled=!complete || meterInHand;
+    let startY=0;
+    bindGesture(lever,{
+      start:event=>{startY=event.clientY;return true;},
+      move:event=>{lever.dataset.pulled=String(event.clientY-startY>12);},
+      end:event=>{
+        lever.dataset.pulled='false';
+        if(event.clientY-startY>=22) isolateCircuit(index);
+        else get('message').textContent='Maintiens la manette et fais-la glisser vers le bas.';
+      },
+      cancel:()=>{lever.dataset.pulled='false';},
+      keyboard:()=>isolateCircuit(index)
+    });
+    const pair=document.createElement('div');
+    pair.className='test-pair';
+    for(const point of [0,1]){
+      const contact=document.createElement('button');
+      contact.type='button';
+      contact.dataset.contact=String(point);
+      contact.dataset.circuit=String(index);
+      contact.textContent=point===0?'A':'B';
+      contact.setAttribute('aria-label',circuit+' · Contact '+contact.textContent);
+      for(const [color,position] of Object.entries(probeContacts)){
+        if(position?.index===index && position.point===point) contact.dataset.probe=color;
       }
-      const wasComplete=progress.tests.size===mission.circuits.length;
-      progress.tests.add(index);
-      saveProgress();
-      display.textContent=circuit+' · '+data.volts+' V simulés';
-      playSound(670,.08,.026,'sine');
-      bakeryBoard();
-      if(!wasComplete && progress.tests.size===mission.circuits.length) notebook.open=true;
-      get('circuitRows').children[index].lastElementChild.focus();
-    };
-    card.append(title,state,test);
+      contact.onclick=()=>{
+        if(!meterInHand || !selectedProbe){
+          get('message').textContent='Prends le voltmètre et sélectionne une pointe.';
+          return;
+        }
+        placeProbe(selectedProbe,index,point);
+      };
+      pair.appendChild(contact);
+    }
+    card.append(title,state,lever,pair);
     return card;
   });
   get('circuitRows').replaceChildren(...cards);
@@ -555,7 +667,9 @@ function board(feedback = ''){
       openPanel(mission.place,'Circuit sécurisé','La mise hors tension est confirmée dans la simulation.',[close]);
       return;
     }
-    openPanel(mission.place,'Mise en sécurité','Le circuit est isolé. Le contrôle de sécurité est simulé avant toute intervention.',
+    openPanel(mission.place,'Mise en sécurité',missionIndex===0
+      ? 'Manette du four abaissée. Confirme la mise en sécurité simulée avant d’ouvrir le four.'
+      : 'Le circuit est isolé. Le contrôle de sécurité est simulé avant toute intervention.',
       [['Consigner et vérifier la mise hors tension',()=>{
         progress.secured=true;
         updateObjective();
@@ -1533,6 +1647,7 @@ function startMission(index,resume=null){
   progress={interview,tests,isolated,secured,checks,work,fixings,fixed,energized,verified:energized && resume?.verified===true,powered:false};
   selectedTool=null;
   meterInHand=false;
+  resetProbes();
   get('meterDisplay').textContent='— V simulés';
   get('notebook').open=false;
   poweredAt=undefined;
