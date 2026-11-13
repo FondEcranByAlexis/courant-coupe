@@ -27,8 +27,9 @@ small{display:block;color:#bdbdae;line-height:1.45;margin-top:1rem}
 #brief,#help,#action,#stick,#compass{background:#151914ec;border:1px solid var(--border);border-radius:10px}
 #brief{padding:.65rem .8rem;max-width:28rem}
 #goal{display:block;margin-top:.27rem;font-size:clamp(.83rem,2.5vw,1rem)}
-#help,#action,#stick{pointer-events:auto}
-#help{padding:.52rem .7rem}
+#help,#action,#stick,#missionsButton{pointer-events:auto}
+#help,#missionsButton{padding:.52rem .7rem}
+#toolbar{display:flex;gap:.4rem}
 #cross{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:8px;height:8px;border:1px solid #fff;border-radius:50%;box-shadow:0 0 5px #000}
 #action{position:absolute;left:50%;bottom:max(1rem,env(safe-area-inset-bottom));transform:translateX(-50%);white-space:nowrap;background:#222419;padding:.68rem .9rem}
 #action:disabled{opacity:.7;cursor:default}
@@ -42,12 +43,42 @@ dialog{padding:0;border:0;background:none;max-height:calc(100% - 1.2rem);width:m
 dialog::backdrop{background:#080c09b8}
 dialog .panel{max-height:min(85dvh,46rem)}
 @media(pointer:coarse){#stick{display:block}#action{left:auto;right:.8rem;transform:none;max-width:calc(100vw - 108px);overflow:hidden;text-overflow:ellipsis}#compass{bottom:5.6rem}}
+#intro .panel{width:min(100%,58rem)}
+#missionList{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.6rem;margin-top:1.15rem}
+.mission-card{text-align:left;display:grid;align-content:start;gap:.3rem;min-height:5rem}
+.mission-card span{font-size:.78rem;color:#d1c7ae}
+.mission-card strong{font-size:.96rem}
+.mission-card:hover{border-color:var(--yellow)}
+#rotate{z-index:2}
+#rotate .panel{max-width:25rem}
+@media(max-width:580px) and (orientation:portrait){#missionList{grid-template-columns:1fr}}
+@media(orientation:landscape) and (max-height:530px){
+  .overlay{padding:.5rem max(.5rem,env(safe-area-inset-right)) .5rem max(.5rem,env(safe-area-inset-left))}
+  .panel{padding:.8rem 1rem}
+  h1{font-size:clamp(2rem,7vh,3.2rem)}
+  h2{font-size:1.35rem}
+  p{margin:.4rem 0}
+  #missionList{margin-top:.55rem;gap:.35rem}
+  .mission-card{min-height:3.6rem;padding:.4rem .65rem}
+  small{margin-top:.5rem}
+  dialog{width:min(calc(100% - 2rem),42rem)}
+  #choices{grid-template-columns:repeat(2,minmax(0,1fr));gap:.35rem}
+  #choices button{padding:.55rem .65rem}
+  #message:empty{display:none}
+  #compass{bottom:1rem}
+  #action:not(:disabled){max-width:35vw}
+}
+@media(pointer:coarse){
+  #top{left:max(.75rem,env(safe-area-inset-left));right:max(.75rem,env(safe-area-inset-right))}
+  #stick{left:max(1rem,env(safe-area-inset-left))}
+  #action{right:max(.8rem,env(safe-area-inset-right))}
+}
 </style>
 </head>
 <body>
-<canvas id="view" aria-label="Boulangerie en 3D"></canvas>
+<canvas id="view" aria-label="Lieu de la mission en 3D"></canvas>
 <div id="hud" hidden>
-  <div id="top"><div id="brief"><div class="brand">Mission 01 · 05 h 42</div><strong id="goal"></strong></div><button id="help" aria-label="Afficher les commandes">?</button></div>
+  <div id="top"><div id="brief"><div class="brand" id="missionName"></div><strong id="goal"></strong></div><div id="toolbar"><button id="missionsButton">Missions</button><button id="help" aria-label="Afficher les commandes">?</button></div></div>
   <span id="cross"></span><div id="compass"></div>
   <div id="stick" aria-label="Joystick de déplacement"><div id="thumb"></div></div>
   <button id="action" disabled>Interagir</button>
@@ -56,10 +87,17 @@ dialog .panel{max-height:min(85dvh,46rem)}
   <section class="panel">
     <div class="brand">FBA Games</div>
     <h1>Courant Coupé</h1>
-    <p><strong>La première fournée</strong><br>La boulangerie est dans le noir. Le boulanger t’attend près du comptoir et le premier pain doit encore passer au four.</p>
-    <button id="start" class="primary">Entrer dans la boulangerie</button>
-    <small>Mission d’environ 5 min · Clavier ou commandes tactiles</small>
+    <p>Choisis une intervention.</p>
+    <div id="missionList"></div>
+    <small>Sur téléphone, joue en mode paysage.</small>
     <p id="graphicsError" role="alert" hidden>Le rendu 3D est indisponible dans ce navigateur. Essaie un autre navigateur.</p>
+  </section>
+</div>
+<div id="rotate" class="overlay" hidden>
+  <section class="panel">
+    <div class="brand">Courant Coupé</div>
+    <h2>Tourne ton téléphone</h2>
+    <p>Passe en mode paysage pour continuer la mission.</p>
   </section>
 </div>
 <dialog id="dialog"><section class="panel">
@@ -75,13 +113,72 @@ const flat = gl ? null : canvas.getContext('2d', {alpha:false});
 const modal = get('dialog');
 const keys = new Set();
 const camera = {x:0, z:2.2, yaw:0, pitch:0};
-const progress = {interview:false, tests:new Set(), isolated:false, fixed:false, powered:false};
-const circuits = ['Éclairage', 'Vitrine', 'Four'];
-const targets = [
-  {id:'client', name:'Parler au boulanger', short:'Boulanger', x:0, y:1.45, z:0.35},
-  {id:'board', name:'Examiner le tableau', short:'Tableau', x:-3.58, y:1.55, z:-2.45},
-  {id:'oven', name:'Examiner le four', short:'Four', x:2.2, y:1.18, z:-3.38}
+const missions = [
+  {
+    title:'La première fournée', place:'Boulangerie', client:'le boulanger', time:'05 h 42',
+    report:'La vitrine et les lampes marchaient. Dès que j’ai lancé la chauffe du four, tout s’est éteint.',
+    circuits:['Éclairage','Vitrine','Four'], fault:2, equipment:'Four de cuisson', short:'Four',
+    reading:'Défaut détecté sur le module de chauffe.',
+    repair:'Remplacer le module de chauffe',
+    choices:['Remplacer la minuterie','Remplacer l’écran de commande'],
+    win:'La fournée est sauvée', result:'Le four, la vitrine et les lampes fonctionnent. Le boulanger peut lancer sa première fournée.',
+    colors:['#9d9275','#5d5142','#85745c','#aa6a42']
+  },
+  {
+    title:'Sous-sol dans le noir', place:'Parking souterrain', client:'le gardien', time:'21 h 18',
+    report:'La barrière répond encore. Après le passage d’une voiture, toute la rangée de lampes de l’allée s’est éteinte.',
+    circuits:['Éclairage','Ventilation','Barrière'], fault:0, equipment:'Armoire d’éclairage', short:'Armoire',
+    reading:'La commande est reçue, mais le relais d’éclairage ne commute pas.',
+    repair:'Remplacer le relais d’éclairage',
+    choices:['Remplacer le capteur de présence','Remplacer le moteur de la barrière'],
+    win:'L’allée se rallume', result:'Les plafonniers éclairent à nouveau l’allée et les places de stationnement.',
+    colors:['#667273','#4f575a','#647174','#d0a747']
+  },
+  {
+    title:'Le rideau va se lever', place:'Salle de spectacle', client:'la régisseuse', time:'19 h 50',
+    report:'Les balises restent allumées. Quand j’ai envoyé le premier effet, les projecteurs de la scène ont coupé.',
+    circuits:['Sonorisation','Projecteurs','Balisage'], fault:1, equipment:'Rack des projecteurs', short:'Rack',
+    reading:'Le module de puissance du rack renvoie une erreur de sortie.',
+    repair:'Remplacer le module de puissance',
+    choices:['Remplacer la console de son','Remplacer la batterie des balises'],
+    win:'Place au spectacle', result:'Les projecteurs reprennent leur séquence. La régisseuse peut lancer le spectacle.',
+    colors:['#65495b','#412c38','#634656','#8f4261']
+  },
+  {
+    title:'Alerte au froid', place:'Entrepôt frigorifique', client:'la responsable', time:'04 h 26',
+    report:'Les lampes sont restées allumées. Le groupe froid s’est arrêté et l’écran indique que la température remonte.',
+    circuits:['Groupe froid','Éclairage','Quai'], fault:0, equipment:'Groupe frigorifique', short:'Groupe froid',
+    reading:'Le ventilateur du condenseur renvoie un défaut de rotation.',
+    repair:'Remplacer le ventilateur du condenseur',
+    choices:['Remplacer le voyant de température','Remplacer la commande de quai'],
+    win:'Le froid revient', result:'Le groupe frigorifique redémarre et la température commence à redescendre.',
+    colors:['#769099','#536c75','#74909a','#589aaa']
+  },
+  {
+    title:'Dernier départ', place:'Gare', client:'le chef de gare', time:'22 h 54',
+    report:'Les lampes et les annonces fonctionnent. Les écrans de départ se sont tous figés juste avant le dernier train.',
+    circuits:['Annonces','Éclairage','Affichage'], fault:2, equipment:'Baie d’affichage', short:'Affichage',
+    reading:'La baie est alimentée. Son contrôleur ne répond plus au test de communication.',
+    repair:'Remplacer le contrôleur d’affichage',
+    choices:['Remplacer l’amplificateur des annonces','Remplacer le programmateur d’éclairage'],
+    win:'Départ affiché', result:'Les écrans indiquent le quai et l’heure du dernier train.',
+    colors:['#78827b','#565c52','#83816b','#a78b49']
+  }
 ];
+const targets = [
+  {id:'client',x:0,y:1.45,z:.35},
+  {id:'board',name:'Examiner le tableau',short:'Tableau',x:-3.58,y:1.55,z:-2.45},
+  {id:'equipment',x:2.2,y:1.18,z:-3.38}
+];
+let missionIndex=0;
+let mission=missions[0];
+let progress;
+let successTimer;
+let completed=new Set();
+try{
+  const saved=JSON.parse(localStorage.getItem('courant-coupe-missions') || '[]');
+  if(Array.isArray(saved)) completed=new Set(saved.filter(index=>Number.isInteger(index) && index>=0 && index<missions.length));
+}catch{}
 let started = false;
 let activeTarget;
 let stage = 'client';
@@ -112,82 +209,95 @@ function openPanel(category, title, description, actions, feedback = ''){
   if(!modal.open) modal.showModal();
   else buttons[0]?.focus();
 }
-const close = ['Retour à la boulangerie', () => modal.close()];
+const close = ['Retour à la mission', () => modal.close()];
 
 function client(){
-  progress.interview = true;
-  objective('board','Examine le tableau et compare les relevés.');
-  openPanel('Comptoir','Le boulanger','« La vitrine et les lampes marchaient. Dès que j’ai lancé la chauffe du four, tout s’est éteint. »',
-    [['Aller voir le tableau', () => modal.close(), true]]);
+  if(!progress.interview){
+    progress.interview=true;
+    objective('board','Examine le tableau et compare les relevés.');
+  }
+  openPanel(mission.place,mission.client[0].toUpperCase()+mission.client.slice(1),'« '+mission.report+' »',
+    [['Reprendre la mission', () => modal.close(), true]]);
 }
 function board(feedback = ''){
+  const fault=mission.circuits[mission.fault];
   if(!progress.interview){
-    openPanel('Local technique','Tableau électrique','Trois circuits desservent la boulangerie. Le boulanger peut te dire ce qui se passait au moment de la coupure.',[close]);
+    openPanel(mission.place,'Tableau électrique','Interroge la personne sur place avant de commencer le diagnostic.',[close]);
     return;
   }
   if(progress.fixed){
-    openPanel('Local technique','Contrôle final','Le module du four a été remplacé. Il reste à remettre l’installation en service.',
-      [['Remettre le courant', restore, true], close]);
+    openPanel(mission.place,'Contrôle final','La réparation est terminée. Relance le circuit pour vérifier que l’équipement fonctionne.',
+      [['Remettre le circuit en service', restore, true],close]);
     return;
   }
   if(progress.isolated){
-    openPanel('Local technique','Circuit du four isolé','Le four est prêt pour la réparation dans la simulation.',[close]);
+    openPanel(mission.place,'Circuit isolé','Tu peux intervenir sur l’équipement dans la simulation.',[close]);
     return;
   }
-  const actions = circuits.map(circuit => [
-    progress.tests.has(circuit) ? circuit + ' · relevé effectué' : 'Relever l’état du circuit ' + circuit.toLowerCase(),
-    () => {
-      progress.tests.add(circuit);
-      board(circuit === 'Four' ? 'Four · le simulateur détecte un défaut sur le module de chauffe.' : circuit + ' · aucun défaut détecté.');
+  const actions=mission.circuits.map((circuit,index)=>[
+    progress.tests.has(index) ? circuit+' · relevé effectué' : 'Relever le circuit '+circuit.toLowerCase(),
+    ()=>{
+      progress.tests.add(index);
+      board(circuit+' · '+(index===mission.fault ? mission.reading : 'Aucun défaut détecté.'));
     }
   ]);
-  if(progress.tests.size === circuits.length){
-    actions.push(...circuits.map(circuit => ['Isoler le circuit ' + circuit.toLowerCase(), () => {
-      if(circuit !== 'Four'){
-        board('Ce circuit ne présente aucun défaut. Relis les relevés et le témoignage.');
+  if(progress.tests.size===mission.circuits.length){
+    actions.push(...mission.circuits.map(circuit=>['Isoler le circuit '+circuit.toLowerCase(),()=>{
+      if(circuit!==fault){
+        board('Ce circuit ne présente aucun défaut. Compare les relevés.');
         return;
       }
-      progress.isolated = true;
-      objective('oven','Va au four et remplace son module défectueux.');
+      progress.isolated=true;
+      objective('equipment','Interviens sur l’équipement indiqué.');
       board();
     }]));
   }
-  openPanel('Local technique','Tableau électrique','Compare les trois relevés du simulateur pour identifier le circuit en défaut.',[...actions,close],feedback);
+  openPanel(mission.place,'Tableau électrique','Compare les trois relevés pour identifier le circuit en défaut.',[...actions,close],feedback);
 }
-function oven(){
+function equipment(feedback = ''){
   if(!progress.isolated){
-    openPanel('Fournil','Four de cuisson','Le four s’est arrêté avant la première fournée. Vérifie les circuits au tableau.',[close]);
+    openPanel(mission.place,mission.equipment,'Vérifie les circuits au tableau avant d’intervenir.',[close]);
     return;
   }
   if(progress.fixed){
-    openPanel('Fournil','Module remplacé','Retourne au tableau pour remettre la boulangerie en service.',[close]);
+    openPanel(mission.place,'Réparation terminée','Retourne au tableau pour remettre le circuit en service.',[close]);
     return;
   }
-  openPanel('Fournil','Module de chauffe','Le diagnostic du jeu confirme un module de chauffe défectueux.',[
-    ['Remplacer le module', () => {
-      progress.fixed = true;
-      objective('board','Retourne au tableau pour remettre le courant.');
-      oven();
-    },true], close]);
+  const repairs=[...mission.choices];
+  repairs.splice(mission.fault,0,mission.repair);
+  openPanel(mission.place,mission.equipment,mission.reading,[...repairs.map(label=>[label,()=>{
+    if(label!==mission.repair){
+      equipment('Le défaut persiste. Utilise le relevé pour identifier le composant.');
+      return;
+    }
+    progress.fixed=true;
+    objective('board','Retourne au tableau pour remettre le circuit en service.');
+    equipment();
+  }]),close],feedback);
 }
 function restore(){
   if(progress.powered) return;
-  progress.powered = true;
-  objective(null,'Courant rétabli · mission réussie');
+  progress.powered=true;
+  completed.add(missionIndex);
+  try{localStorage.setItem('courant-coupe-missions',JSON.stringify([...completed]));}catch{}
+  objective(null,'Circuit rétabli · mission réussie');
   modal.close();
-  setTimeout(() => {
-    openPanel('Mission réussie','La fournée est sauvée','Les lampes, la vitrine et le four ont repris du service. Le boulanger peut lancer sa première fournée.',
-      [['Rejouer la mission', () => location.reload(), true],close]);
-  }, 1150);
+  successTimer=setTimeout(()=>{
+    const actions=[
+      ['Rejouer la mission',()=>startMission(missionIndex)],
+      ['Choisir une mission',showMenu],
+      close
+    ];
+    if(missionIndex+1<missions.length){
+      actions.unshift(['Mission suivante',()=>startMission(missionIndex+1),true]);
+    }
+    openPanel('Mission réussie',mission.win,mission.result,actions);
+    updateOrientation();
+  },950);
 }
+const interactions={client,board,equipment};
 function interact(){
-  if(!activeTarget || modal.open || progress.powered) return;
-  if(activeTarget.id === 'client'){
-    if(progress.interview) openPanel('Comptoir','Le boulanger','« Tout a sauté quand j’ai lancé la chauffe du four. »',[close]);
-    else client();
-  }
-  if(activeTarget.id === 'board') board();
-  if(activeTarget.id === 'oven') oven();
+  if(activeTarget && !modal.open && !progress.powered && !rotationBlocked) interactions[activeTarget.id]();
 }
 
 const boxes = [];
@@ -244,7 +354,72 @@ function createBakery(){
   box(-3.15,.68,2.82,.73,1.36,.68,'#604e39',{solid:true});
   box(-3.15,1.4,2.82,.84,.12,.77,'#897257');
 }
-createBakery();
+function createVenue(){
+  const [wall,floor,tile,accent]=mission.colors;
+  box(0,-.08,0,8,.16,9,floor);
+  box(0,3.14,0,8,.17,9,wall);
+  for(const x of [-4,4]) box(x,1.5,0,.24,3,9,wall);
+  for(const z of [-4.5,4.5]) box(0,1.5,z,8,3,.24,wall);
+  for(let x=-3;x<=3;x++){
+    for(let z=-4;z<=4;z++) box(x,.003,z,.975,.006,.975,tile);
+  }
+  for(const z of [-2.7,0,2.7]) box(0,2.98,z,1.7,.09,.26,'#fff0bb',{glow:true});
+  box(0,.5,1.02,2.1,1,.62,accent,{solid:true});
+  box(0,1.02,1.02,2.19,.08,.69,wall);
+  box(0,1.18,.35,.49,.58,.3,'#354047',{solid:true});
+  box(0,1.58,.35,.24,.25,.23,'#be8668');
+  box(-3.8,1.54,-2.45,.27,.81,1.02,'#56615a');
+  for(const z of [-2.74,-2.45,-2.16]) box(-3.64,1.55,z,.05,.24,.15,'#d9d7c2');
+  box(2.2,.92,-3.93,1.48,1.84,1.05,'#343a3c',{solid:true});
+  box(2.2,1.2,-3.395,1.19,.52,.04,accent);
+  for(const x of [1.85,2.2,2.55]) box(x,1.19,-3.36,.13,.15,.035,'#212526');
+  if(missionIndex===1){
+    for(const z of [-3,.1,3]){
+      box(3.32,1.5,z,.5,3,.5,'#545b59',{solid:true});
+      box(3.04,.73,z,.07,.23,.51,accent);
+    }
+    for(const x of [-2.65,-1.45,1.45,2.65]) box(x,.013,.45,.055,.014,2.7,accent);
+    box(2.93,.55,2.68,.87,1.1,.83,'#50555a',{solid:true});
+    box(2.35,.94,2.68,.42,.11,.13,accent);
+  }
+  if(missionIndex===2){
+    box(-1.4,.17,-3.52,3.5,.34,1.4,'#2e202d',{solid:true});
+    for(const x of [-3.4,-2.7,-2,-1.3]) box(x,1.64,-4.28,.45,2.8,.2,accent);
+    for(const x of [-3,3]) box(x,2.7,-2.8,.29,.25,.36,'#25282e');
+  }
+  if(missionIndex===3){
+    for(const z of [-.2,1.25,2.7]){
+      box(3.25,1,z,.79,2,1.02,'#59727a',{solid:true});
+      box(2.84,1.03,z,.04,1.63,.84,accent);
+      box(2.8,1.05,z,.055,.21,.08,'#e0e9df');
+    }
+    box(-2.05,.58,-3.64,1.3,1.16,.84,'#718991',{solid:true});
+  }
+  if(missionIndex===4){
+    for(const z of [-.75,2.75]){
+      box(3.03,.56,z,1.09,.12,.6,accent,{solid:true});
+      box(3.42,.9,z,.14,.69,.6,'#626960');
+    }
+    box(-1.7,2.45,-4.26,2.4,.48,.22,'#232c2d');
+    for(const x of [-2.5,-1.8,-1.1]) box(x,2.45,-4.13,.47,.09,.035,'#dfb963',{glow:true});
+  }
+}
+function buildScene(){
+  boxes.length=0;
+  colliders.length=0;
+  if(missionIndex===0) createBakery();
+  else createVenue();
+  for(const object of boxes){
+    object.rgb=object.color.slice(1).match(/../g).map(pair=>parseInt(pair,16)/255);
+  }
+}
+
+
+function sceneLight(now){
+  const ambient=[0,0,.13,.32,.3][missionIndex];
+  if(!progress.powered) return ambient;
+  return ambient+(1-ambient)*Math.min(1,(now-poweredAt)/850);
+}
 
 function shader(type, code){
   const result = gl.createShader(type);
@@ -307,9 +482,6 @@ function setupGraphics(){
   locations = Object.fromEntries(['Position','Size','Camera','Yaw','Pitch','Projection','Color','Light','Glow']
     .map(name => [name,gl.getUniformLocation(program,'u'+name)]));
 }
-for(const object of boxes){
-  object.rgb = object.color.slice(1).match(/../g).map(pair => parseInt(pair,16)/255);
-}
 function renderWebGL(now){
   const scale = Math.min(window.devicePixelRatio || 1, 1.65);
   const width = Math.round(canvas.clientWidth*scale);
@@ -322,7 +494,7 @@ function renderWebGL(now){
   const sy = Math.sin(camera.yaw);
   const cy = Math.cos(camera.yaw);
   const focal = Math.min(1.55,1.14*width/height);
-  const light = progress.powered ? Math.min(1, (now-poweredAt)/850) : 0;
+  const light = sceneLight(now);
   gl.clearColor(.16,.16,.14,1);
   gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
   gl.uniform3f(locations.Camera,camera.x,1.61,camera.z);
@@ -369,7 +541,7 @@ function renderCanvas(now){
   const sy=Math.sin(camera.yaw), cy=Math.cos(camera.yaw);
   const sp=Math.sin(camera.pitch), cp=Math.cos(camera.pitch);
   const focal=Math.min(1.55*height,1.14*width)/2;
-  const light=progress.powered?Math.min(1,(now-poweredAt)/850):0;
+  const light=sceneLight(now);
   const surfaces=[];
   for(const object of boxes){
     const vertices=corners.map(([vx,vy,vz])=>{
@@ -445,7 +617,7 @@ function frame(now){
   const delta = Math.min(.05,(now-frameTime)/1000);
   frameTime=now;
   if(progress.powered && poweredAt===undefined) poweredAt=now;
-  if(started && !modal.open){move(delta);updateHud();}
+  if(started && !modal.open && !rotationBlocked){move(delta);updateHud();}
   if(gl) renderWebGL(now);
   else renderCanvas(now);
   requestAnimationFrame(frame);
@@ -465,7 +637,7 @@ function padPosition(event){
 }
 const pad=get('stick');
 pad.onpointerdown=event=>{
-  if(movementPad) return;
+  if(movementPad || rotationBlocked) return;
   movementPad={id:event.pointerId,x:0,y:0};
   pad.setPointerCapture(event.pointerId);
   padPosition(event);
@@ -473,7 +645,7 @@ pad.onpointerdown=event=>{
 pad.onpointermove=event=>{if(movementPad?.id===event.pointerId) padPosition(event);};
 pad.onlostpointercapture=event=>{if(movementPad?.id===event.pointerId) resetPad();};
 canvas.onpointerdown=event=>{
-  if(!started || modal.open || look || event.button!==0) return;
+  if(!started || modal.open || rotationBlocked || look || event.button!==0) return;
   look={id:event.pointerId,x:event.clientX,y:event.clientY};
   canvas.setPointerCapture(event.pointerId);
 };
@@ -486,7 +658,7 @@ canvas.onpointermove=event=>{
 };
 canvas.onlostpointercapture=event=>{if(look?.id===event.pointerId) look=null;};
 window.addEventListener('keydown',event=>{
-  if(!started || modal.open || event.altKey || event.ctrlKey || event.metaKey) return;
+  if(!started || modal.open || rotationBlocked || event.altKey || event.ctrlKey || event.metaKey) return;
   const key=event.key.toLowerCase();
   if(key==='e'){
     if(!event.repeat) interact();
@@ -502,12 +674,93 @@ window.addEventListener('blur',()=>{keys.clear();resetPad();look=null;});
 get('action').onclick=interact;
 get('help').onclick=()=>openPanel('Commandes','Se déplacer et interagir',
   'Clavier · ZQSD ou WASD pour marcher, flèches gauche/droite ou glissement à la souris pour tourner, E pour interagir. Tactile · joystick pour marcher, glissement dans la scène pour regarder, bouton d’action pour interagir. Suis la flèche pour trouver ton prochain objectif.',[close]);
-get('start').onclick=()=>{
+let rotationBlocked=false;
+let reopenPanel=false;
+const portraitTouch=matchMedia('(orientation: portrait) and (pointer: coarse)');
+function updateOrientation(){
+  const blocked=started && portraitTouch.matches;
+  if(blocked!==rotationBlocked){
+    rotationBlocked=blocked;
+    keys.clear();
+    resetPad();
+    look=null;
+    if(blocked && modal.open){
+      reopenPanel=true;
+      modal.close();
+    }
+    if(!blocked && reopenPanel){
+      reopenPanel=false;
+      modal.showModal();
+    }
+  }else if(blocked && modal.open){
+    reopenPanel=true;
+    modal.close();
+  }
+  get('rotate').hidden=!blocked;
+  get('hud').hidden=!started || blocked;
+}
+portraitTouch.addEventListener('change',updateOrientation);
+async function requestLandscape(){
+  if(!matchMedia('(pointer: coarse)').matches || !screen.orientation?.lock) return;
+  try{
+    if(!document.fullscreenElement) await document.documentElement.requestFullscreen();
+    await screen.orientation.lock('landscape');
+  }catch{}
+}
+function renderMissionList(){
+  const list=get('missionList');
+  list.replaceChildren(...missions.map((item,index)=>{
+    const button=document.createElement('button');
+    const place=document.createElement('span');
+    const title=document.createElement('strong');
+    button.className='mission-card';
+    place.textContent=item.place+(completed.has(index)?' · réussie':'');
+    title.textContent=item.title;
+    button.append(title,place);
+    button.disabled=!gl && !flat;
+    button.onclick=()=>{
+      startMission(index);
+      void requestLandscape();
+    };
+    return button;
+  }));
+}
+function showMenu(){
+  clearTimeout(successTimer);
+  started=false;
+  reopenPanel=false;
+  if(modal.open) modal.close();
+  get('intro').hidden=false;
+  renderMissionList();
+  updateOrientation();
+}
+function startMission(index){
+  clearTimeout(successTimer);
+  if(modal.open) modal.close();
+  reopenPanel=false;
+  missionIndex=index;
+  mission=missions[index];
+  progress={interview:false,tests:new Set(),isolated:false,fixed:false,powered:false};
+  poweredAt=undefined;
+  keys.clear();
+  resetPad();
+  look=null;
+  Object.assign(camera,{x:0,z:2.2,yaw:0,pitch:0});
+  const contact=mission.client.startsWith('le ')?'au '+mission.client.slice(3):'à '+mission.client;
+  Object.assign(targets[0],{name:'Parler '+contact,short:mission.client});
+  Object.assign(targets[2],{name:'Examiner · '+mission.short,short:mission.short});
+  buildScene();
   started=true;
   get('intro').hidden=true;
-  get('hud').hidden=false;
-  objective('client','Parle au boulanger près du comptoir.');
-};
+  get('missionName').textContent='Mission '+String(index+1).padStart(2,'0')+' · '+mission.time;
+  objective('client','Va parler '+contact+'.');
+  updateHud();
+  updateOrientation();
+}
+get('missionsButton').onclick=showMenu;
+progress={powered:false};
+renderMissionList();
+buildScene();
 try{
   if(!gl && !flat) throw new Error('Canvas indisponible');
   if(gl) setupGraphics();
@@ -515,7 +768,7 @@ try{
 }catch(error){
   console.error(error);
   get('graphicsError').hidden=false;
-  get('start').disabled=true;
+  for(const button of get('missionList').children) button.disabled=true;
 }
 </script>
 </body>
