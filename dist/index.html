@@ -42,21 +42,33 @@ small{display:block;color:#bdbdae;line-height:1.45;margin-top:1rem}
 #toolbox{display:flex;flex-wrap:wrap;gap:.4rem}
 #toolbox button{font-size:.86rem;padding:.5rem .65rem;min-height:44px}
 #toolbox button[aria-pressed=true]{border-color:var(--yellow);color:var(--yellow);background:#473920}
-#partTarget{position:relative;display:grid;place-items:center;gap:.25rem;min-height:90px;width:100%;text-align:center;background:linear-gradient(120deg,#4e5651,#303633 70%);border-color:#7f8a80;touch-action:manipulation}
-#partTarget:hover,#partTarget:focus-visible{border-color:var(--yellow)}
-#partTarget span{color:#fff0c9;font-size:.85rem}
-#partTarget::before{content:'';width:25px;height:25px;border:2px solid #f3d491;border-radius:50%;background:linear-gradient(45deg,transparent 42%,#232721 43%,#232721 57%,transparent 58%),linear-gradient(-45deg,transparent 42%,#232721 43%,#232721 57%,transparent 58%),#96865f;box-shadow:0 0 0 5px #241f195e}
-#partTarget[data-part=nut]::before{border-radius:0;clip-path:polygon(25% 0,75% 0,100% 50%,75% 100%,25% 100%,0 50%);background:radial-gradient(circle,#252921 0 27%,#bcaa7b 30%)}
-#partTarget[data-part=slot]::before{background:linear-gradient(0deg,#96865f 42%,#232721 43% 57%,#96865f 58%)}
-#partTarget[data-part=connector]::before{border-radius:4px;background:repeating-linear-gradient(90deg,#8f805e 0 4px,#292d26 4px 7px)}
-#partTarget[data-part=module]::before{border-radius:5px;background:repeating-linear-gradient(0deg,#474a3c 0 3px,#9d966f 3px 5px)}
+#repairScene{position:relative;isolation:isolate;min-height:174px;overflow:hidden;border:1px solid #758078;border-radius:10px;background:linear-gradient(145deg,#3c4542,#222926);box-shadow:inset 0 0 24px #111a}
+#repairScene button{position:absolute;display:grid;place-items:center;padding:0;min-width:44px;min-height:44px;touch-action:manipulation}
+#repairScene button:not(:disabled):hover,#repairScene button:focus-visible{outline:2px solid var(--yellow);outline-offset:-2px}
+#repairScene button:disabled{cursor:default}
+#cover{z-index:2;inset:9% 14%;width:72%;background:repeating-linear-gradient(0deg,#59625d 0 2px,#5f6963 2px 4px);border:2px solid #a6ada7;box-shadow:0 4px 12px #1218}
+#cover.cover-open{inset:9% 4%;width:15%;background:#48514b;box-shadow:3px 0 10px #1118;writing-mode:vertical-rl;animation:open-cover .25s ease-out}
+@keyframes open-cover{from{width:72%;left:14%}}
+#component{inset:24% 23% 24% 27%;background:repeating-linear-gradient(90deg,#4b4b3a 0 5px,#393d33 5px 10px);border:2px solid #9a9a79}
+#component.empty{background:#1c2320;border:2px dashed #b1b78c}
+#component.new{background:repeating-linear-gradient(90deg,#607564 0 5px,#465d4d 5px 10px);border-color:#b9d1af}
+#spare{z-index:1;bottom:4%;right:3%;width:28%;background:#57452a;border:1px solid #e0be70;font-size:.8rem}
+#spare[aria-pressed=true]{background:var(--yellow);color:#211a0e}
+.fastener{z-index:3;background:#1c241db5;border:1px solid #b3ad88;border-radius:50%;transform:translate(-50%,-50%)}
+.fastener::before{content:'';width:23px;height:23px;border-radius:50%;background:linear-gradient(90deg,transparent 43%,#262b28 44% 56%,transparent 57%),linear-gradient(0deg,#b4a483 43%,#262b28 44% 56%,#b4a483 57%);box-shadow:0 2px 3px #0008}
+.fastener.nut::before{border-radius:0;clip-path:polygon(25% 0,75% 0,100% 50%,75% 100%,25% 100%,0 50%);background:radial-gradient(circle,#252921 0 27%,#bcaa7b 30%)}
+.fastener.slot::before{background:linear-gradient(0deg,#96865f 42%,#232721 43% 57%,#96865f 58%)}
+.fastener.removed::before{width:12px;height:12px;background:#1a211d;border:1px solid #9a9d80}
+.fastener.treated::before{animation:turn-fixing .26s ease-out}
+@keyframes turn-fixing{from{transform:rotate(-120deg) scale(1.2)}to{transform:rotate(0)}}
 #toolHint{margin:0;font-size:.85rem}
 @media(orientation:landscape) and (max-height:530px){
-  #workbench{grid-template-columns:1fr 1fr}
+  #workbench{grid-template-columns:minmax(0,1fr) minmax(0,1.65fr)}
   #toolbox{align-content:center}
   #toolHint{grid-column:1/-1}
-  #partTarget{min-height:76px}
+  #repairScene{min-height:160px}
 }
+@media(prefers-reduced-motion:reduce){#cover,.fastener::before{animation:none!important}}
 #description{white-space:pre-line}
 #message{min-height:1.5em;color:var(--yellow);margin:.7rem 0 0}
 dialog{padding:0;border:0;background:none;max-height:calc(100% - 1.2rem);width:min(calc(100% - 1.2rem),33rem);color:inherit}
@@ -137,7 +149,12 @@ dialog .panel{max-height:min(85dvh,46rem)}
   <div class="brand" id="category"></div><h2 id="title"></h2><p id="description"></p>
   <div id="workbench" hidden>
     <div id="toolbox" role="group" aria-label="Mallette à outils"></div>
-    <button id="partTarget" type="button"><strong id="partName"></strong><span id="partProgress"></span></button>
+    <div id="repairScene" role="group" aria-label="Vue de près de l’équipement">
+      <button id="component" type="button"></button>
+      <button id="cover" type="button"></button>
+      <button id="spare" type="button"></button>
+      <div id="fasteners"></div>
+    </div>
     <p id="toolHint" aria-live="polite"></p>
   </div>
   <div id="choices"></div><p id="message" role="status"></p>
@@ -212,11 +229,6 @@ const procedures = [
       ['Consulter le journal du four','La coupure correspond au démarrage de la chauffe. La minuterie et l’afficheur répondaient.'],
       ['Tester le module de chauffe hors tension','Le simulateur signale un défaut d’isolement sur le module de chauffe.']
     ],
-    work:[
-      {"label":"Déposer le module défectueux","target":"Vis de fixation du module","tool":"cross","points":2,"result":"Le module est libéré de son support.","part":"screw","hint":"Desserre les deux vis de fixation."},
-      {"label":"Installer le module de rechange","target":"Logement du module","tool":"hand","points":1,"result":"Le module de rechange est en place.","part":"module","hint":"Place le module de même référence dans son logement."},
-      {"label":"Remettre le capot","target":"Vis du capot","tool":"cross","points":2,"result":"Le capot est fixé.","part":"screw","hint":"Resserre les deux vis du capot."}
-    ],
     trial:'Lancer un cycle de préchauffage',
     result:'La température monte et la protection ne déclenche plus.'
   },
@@ -225,11 +237,6 @@ const procedures = [
     diagnosis:[
       ['Relire les événements du détecteur','Un passage est bien enregistré et la commande d’allumage est transmise.'],
       ['Contrôler le relais sur le banc de test','Le relais reçoit la commande simulée, mais son contact ne bascule pas.']
-    ],
-    work:[
-      {"label":"Retirer le relais défectueux","target":"Languette du relais","tool":"flat","points":1,"result":"Le relais est dégagé du rail.","part":"slot","hint":"Libère la languette fendue qui retient le relais."},
-      {"label":"Poser le relais de rechange","target":"Rail du relais","tool":"hand","points":1,"result":"Le relais neuf est clipsé.","part":"module","hint":"Clipse le relais de rechange sur son support."},
-      {"label":"Refermer l’armoire","target":"Vis du capot","tool":"cross","points":2,"result":"Le capot de l’armoire est fixé.","part":"screw","hint":"Fixe le capot avec ses deux vis à empreinte en croix."}
     ],
     trial:'Simuler un passage dans l’allée',
     result:'Les plafonniers s’allument au passage, puis s’éteignent après la temporisation de test.'
@@ -240,11 +247,6 @@ const procedures = [
       ['Consulter le journal de la console','Le premier effet a bien été envoyé. Le signal de commande est arrivé au rack.'],
       ['Tester le module sur le banc de test','L’entrée répond, mais la sortie du module reste inactive sur une charge de test.']
     ],
-    work:[
-      {"label":"Débrancher le module","target":"Connecteur du module","tool":"hand","points":1,"result":"Le connecteur est dégagé.","part":"connector","hint":"Appuie sur le clip du connecteur repéré et retire-le."},
-      {"label":"Échanger le module de puissance","target":"Vis du module","tool":"cross","points":2,"result":"Le module de rechange est fixé.","part":"screw","hint":"Agis sur les deux vis à empreinte en croix du module."},
-      {"label":"Raccorder le module","target":"Connecteur du module","tool":"hand","points":1,"result":"Le connecteur est clipsé. Le rack est prêt pour l’essai.","part":"connector","hint":"Remets le connecteur repéré dans son logement."}
-    ],
     trial:'Jouer le premier effet lumière',
     result:'Les projecteurs répondent et suivent la séquence de la console.'
   },
@@ -253,11 +255,6 @@ const procedures = [
     diagnosis:[
       ['Lire l’historique des alarmes','Le ventilateur s’est arrêté avant la mise en sécurité du groupe.'],
       ['Inspecter le ventilateur à l’arrêt','La grille est dégagée. Le contrôle du simulateur confirme que le moteur du ventilateur est bloqué.']
-    ],
-    work:[
-      {"label":"Déposer le ventilateur bloqué","target":"Écrous du support","tool":"socket","points":3,"result":"Le support du ventilateur est libéré.","part":"nut","hint":"Desserre les trois écrous à six pans du support."},
-      {"label":"Monter le ventilateur de rechange","target":"Écrous du ventilateur neuf","tool":"socket","points":3,"result":"Le ventilateur de rechange est fixé.","part":"nut","hint":"Fixe le ventilateur neuf sur les trois écrous de son support."},
-      {"label":"Reposer la grille de protection","target":"Vis de la grille","tool":"cross","points":2,"result":"La grille de protection est fixée.","part":"screw","hint":"Resserre les deux vis à empreinte en croix de la grille."}
     ],
     trial:'Lancer un cycle de froid',
     result:'Le ventilateur tourne, l’alarme disparaît et la température commence à baisser.'
@@ -268,15 +265,42 @@ const procedures = [
       ['Consulter le journal de la baie','Les données horaires arrivent toujours au commutateur de la baie.'],
       ['Tester la liaison vers les écrans','La liaison répond au banc de test. Le contrôleur ne transmet plus les mises à jour.']
     ],
-    work:[
-      {"label":"Sauvegarder la configuration","target":"Interface de la baie","tool":"terminal","points":1,"result":"La configuration a été copiée.","part":"connector","hint":"Récupère les paramètres des écrans depuis l’interface de maintenance simulée."},
-      {"label":"Échanger le contrôleur","target":"Clip de fixation du contrôleur","tool":"hand","points":1,"result":"Le contrôleur de rechange est en place.","part":"module","hint":"Libère le clip et emboîte le contrôleur de rechange."},
-      {"label":"Restaurer la configuration","target":"Interface du contrôleur","tool":"terminal","points":1,"result":"Le contrôleur a chargé les paramètres des écrans.","part":"connector","hint":"Charge la configuration sauvegardée sur le nouveau contrôleur."}
-    ],
     trial:'Envoyer un horaire de test aux écrans',
     result:'Le quai et l’heure se mettent à jour sur tous les écrans, puis l’affichage normal reprend.'
   }
 ];
+const hardware=[
+  {cover:'Capot du four',piece:'Module de chauffe',tool:'cross',part:'screw',count:2},
+  {cover:'Capot de l’armoire',piece:'Relais d’éclairage',tool:'flat',part:'slot',count:1},
+  {cover:'Panneau du rack',piece:'Module de puissance',tool:'cross',part:'screw',count:2},
+  {cover:'Grille de protection',piece:'Ventilateur',tool:'socket',part:'nut',count:3},
+  {cover:'Capot de la baie',piece:'Contrôleur d’affichage',tool:'flat',part:'slot',count:1}
+];
+function repairSteps(index){
+  const part=hardware[index];
+  const single=(id,title,hint,tool,target)=>({id,title,hint,tool,target,count:1});
+  const fixings=(id,title,hint,tool,count,shape,coverFixings,removing)=>
+    ({id,title,hint,tool,count,shape,coverFixings,removing,target:'fasteners'});
+  const steps=[
+    fixings('unscrew-cover','Dévisser le capot','Dévisse les deux vis à empreinte en croix, une par une.','cross',2,'screw',true,true),
+    single('open','Ouvrir le capot','Prends le capot à la main pour accéder à la pièce.','hand','cover'),
+    fixings('release','Libérer la pièce','Actionne chaque fixation de la pièce avec l’outil adapté.',part.tool,part.count,part.part,false,true),
+    single('remove','Retirer la pièce usée','Retire la pièce de son logement à la main.','hand','component'),
+    single('install','Placer la pièce neuve','Prends la pièce de rechange, puis sélectionne le logement vide.','hand','component'),
+    fixings('secure','Fixer la pièce neuve','Remets chaque fixation en place avec l’outil adapté.',part.tool,part.count,part.part,false,false),
+    single('close','Refermer le capot','Remets le capot en place à la main.','hand','cover'),
+    fixings('tighten-cover','Revisser le capot','Resserre les deux vis du capot.','cross',2,'screw',true,false)
+  ];
+  if(index===2){
+    steps.splice(2,0,single('disconnect','Débrancher le connecteur','Déclipse le connecteur repéré sur le module.','hand','component'));
+    steps.splice(7,0,single('reconnect','Rebrancher le connecteur','Emboîte le connecteur sur le module neuf.','hand','component'));
+  }
+  if(index===4){
+    steps.splice(2,0,single('backup','Sauvegarder la configuration','Utilise le terminal sur le contrôleur avant de le retirer.','terminal','component'));
+    steps.splice(7,0,single('configure','Charger la configuration','Utilise le terminal pour transférer la configuration dans le contrôleur neuf.','terminal','component'));
+  }
+  return steps;
+}
 const targets = [
   {id:'client',x:0,y:1.45,z:.35},
   {id:'board',name:'Examiner le tableau',short:'Tableau',x:-3.58,y:1.55,z:-2.45},
@@ -315,7 +339,8 @@ function saveProgress(){
     secured:progress.secured,
     checks:[...progress.checks],
     work:progress.work,
-    toolUses:progress.toolUses,
+    repairVersion:2,
+    fixings:[...progress.fixings],
     energized:progress.energized,
     verified:progress.verified
   };
@@ -436,58 +461,112 @@ function board(feedback = ''){
     ['Compare les trois départs avec le témoignage.',...notes].join('\n'),[...actions,close],feedback);
 }
 let selectedTool=null;
+let spareHeld=false;
+let repairStepsForMission=[];
 function repairBench(step,feedback){
-  openPanel(mission.place,step.label,step.hint,[close],feedback);
+  openPanel(mission.place,step.title,step.hint,[close],feedback);
   const bench=get('workbench');
-  const target=get('partTarget');
+  const cover=get('cover');
+  const component=get('component');
+  const spare=get('spare');
+  const hint=get('toolHint');
+  const part=hardware[missionIndex];
+  const indexOf=id=>repairStepsForMission.findIndex(item=>item.id===id);
+  const after=id=>progress.work>indexOf(id);
+  const coverOpen=after('open') && !after('close');
+  const empty=after('remove') && !after('install');
   const buttons=Object.entries(tools).map(([id,label])=>{
     const button=document.createElement('button');
     button.type='button';
     button.textContent=label;
     button.onclick=()=>{
       selectedTool=id;
+      if(id!=='hand') spareHeld=false;
       updateTools();
     };
     return [id,button];
   });
   function updateTools(){
     for(const [id,button] of buttons) button.setAttribute('aria-pressed',String(id===selectedTool));
-    get('toolHint').textContent=selectedTool
-      ? tools[selectedTool]+' en main. Actionne la zone du composant.'
-      : 'Choisis un outil dans la mallette.';
+    spare.setAttribute('aria-pressed',String(spareHeld));
+    spare.textContent=spareHeld?'Pièce en main':'Prendre la pièce neuve';
+    hint.textContent=selectedTool ? tools[selectedTool]+' en main.' : 'Choisis un outil dans la mallette.';
   }
-  function updatePart(){
-    const position=progress.toolUses+1;
-    get('partName').textContent=step.target;
-    get('partProgress').textContent=step.points>1 ? 'Fixation '+position+' / '+step.points : 'Utiliser sur cette zone';
+  function useTool(id){
+    if(selectedTool===id) return true;
+    hint.textContent=selectedTool?'Cet outil ne convient pas. Observe la zone à manipuler.':'Choisis d’abord un outil.';
+    return false;
   }
-  target.dataset.part=step.part;
-  target.onclick=()=>{
-    if(!modal.open || bench.hidden) return;
-    if(selectedTool!==step.tool){
-      get('toolHint').textContent=selectedTool
-        ? 'Cet outil ne convient pas à cette zone. Observe la fixation ou l’interface.'
-        : 'Prends un outil dans la mallette, puis réessaie.';
-      return;
-    }
-    progress.toolUses++;
-    if(progress.toolUses<step.points){
-      updatePart();
-      saveProgress();
-      get('toolHint').textContent='Fixation traitée. Passe à la suivante.';
-      return;
-    }
-    progress.toolUses=0;
+  function advance(){
+    spareHeld=false;
+    progress.fixings.clear();
     progress.work++;
-    progress.fixed=progress.work===procedures[missionIndex].work.length;
+    progress.fixed=progress.work===repairStepsForMission.length;
     updateObjective();
-    equipment(step.result);
+    equipment(progress.fixed?'Le capot est refermé et toutes ses vis sont serrées.':'');
+  }
+  cover.hidden=false;
+  cover.className=coverOpen?'cover-open':'';
+  cover.textContent=coverOpen?'Ouvert':part.cover;
+  cover.disabled=step.target!=='cover';
+  cover.onclick=()=>{if(useTool(step.tool)) advance();};
+  component.hidden=!coverOpen;
+  component.className=empty?'empty':after('install')?'new':'';
+  component.textContent=empty?'Logement vide':step.id==='disconnect'||step.id==='reconnect'?'Connecteur du module':part.piece;
+  component.disabled=step.target!=='component';
+  component.onclick=()=>{
+    if(!useTool(step.tool)) return;
+    if(step.id==='install' && !spareHeld){
+      hint.textContent='Prends d’abord la pièce neuve.';
+      return;
+    }
+    advance();
   };
+  spare.hidden=step.id!=='install';
+  spare.onclick=()=>{
+    if(!useTool('hand')) return;
+    spareHeld=true;
+    updateTools();
+    hint.textContent='Pièce en main. Sélectionne son logement.';
+    component.focus();
+  };
+  const locations=step.coverFixings || step.id==='open' ? [[23,24],[77,76]] : [[34,28],[69,28],[69,70]];
+  const showInactiveHoles=step.id==='open';
+  const fixings=Array.from({length:step.target==='fasteners'?step.count:showInactiveHoles?2:0},(_,index)=>{
+    const button=document.createElement('button');
+    button.type='button';
+    button.className='fastener '+(step.shape || 'screw');
+    const [left,top]=locations[index];
+    button.style.left=left+'%';
+    button.style.top=top+'%';
+    const label=(step.shape==='nut'?'Écrou ':step.shape==='slot'?'Languette ':'Vis ')+(index+1);
+    function markDone(){
+      button.classList.add('treated');
+      if(step.removing) button.classList.add('removed');
+      button.disabled=true;
+      button.setAttribute('aria-label',label+' traitée');
+    }
+    button.setAttribute('aria-label',label);
+    if(showInactiveHoles){button.classList.add('removed');button.disabled=true;}
+    else if(progress.fixings.has(index)) markDone();
+    button.onclick=()=>{
+      if(progress.fixings.has(index) || !useTool(step.tool)) return;
+      progress.fixings.add(index);
+      markDone();
+      if(progress.fixings.size===step.count) advance();
+      else{
+        hint.textContent=progress.fixings.size+' / '+step.count+' fixations traitées.';
+        saveProgress();
+        fixings.find(fixing=>!fixing.disabled)?.focus();
+      }
+    };
+    return button;
+  });
+  get('fasteners').replaceChildren(...fixings);
   get('toolbox').replaceChildren(...buttons.map(([,button])=>button));
   bench.hidden=false;
   updateTools();
-  updatePart();
-  (selectedTool ? target : buttons[0][1]).focus();
+  (buttons.find(([id])=>id===selectedTool) || buttons[0])[1].focus();
 }
 function equipment(feedback = ''){
   const procedure=procedures[missionIndex];
@@ -514,7 +593,7 @@ function equipment(feedback = ''){
   }
   const notes=[...progress.checks].sort().map(index=>procedure.diagnosis[index][1]);
   if(progress.work>=0){
-    repairBench(procedure.work[progress.work],feedback);
+    repairBench(repairStepsForMission[progress.work],feedback);
     return;
   }
   const actions=procedure.diagnosis.flatMap(([label],index)=>progress.checks.has(index) ? [] : [
@@ -533,7 +612,8 @@ function equipment(feedback = ''){
         return;
       }
       progress.work=0;
-      progress.toolUses=0;
+      progress.fixings.clear();
+      spareHeld=false;
       selectedTool=null;
       saveProgress();
       equipment();
@@ -1033,13 +1113,17 @@ function startMission(index,resume=null){
   const secured=isolated && (fixed || resume?.secured===true);
   const checks=new Set(secured && Array.isArray(resume?.checks)
     ? resume.checks.filter(check=>Number.isInteger(check) && check>=0 && check<procedure.diagnosis.length) : []);
-  const work=fixed ? procedure.work.length : checks.size===procedure.diagnosis.length &&
-    Number.isInteger(resume?.work) && resume.work>=0 && resume.work<procedure.work.length ? resume.work : -1;
+  repairStepsForMission=repairSteps(index);
+  const savedWork=checks.size===procedure.diagnosis.length && Number.isInteger(resume?.work) && resume.work>=0;
+  const work=fixed ? repairStepsForMission.length : savedWork
+    ? resume.repairVersion===2 ? Math.min(resume.work,repairStepsForMission.length-1) : 0
+    : -1;
   const energized=fixed && resume?.energized===true;
-  const toolUses=work>=0 && !fixed && Number.isInteger(resume?.toolUses)
-    && resume.toolUses>=0 && resume.toolUses<procedure.work[work].points ? resume.toolUses : 0;
-  progress={interview,tests,isolated,secured,checks,work,toolUses,fixed,energized,verified:energized && resume?.verified===true,powered:false};
+  const fixings=new Set(work>=0 && !fixed && resume.repairVersion===2 && Array.isArray(resume.fixings)
+    ? resume.fixings.filter(fixing=>Number.isInteger(fixing) && fixing>=0 && fixing<repairStepsForMission[work].count) : []);
+  progress={interview,tests,isolated,secured,checks,work,fixings,fixed,energized,verified:energized && resume?.verified===true,powered:false};
   selectedTool=null;
+  spareHeld=false;
   poweredAt=undefined;
   keys.clear();
   resetPad();
