@@ -2,6 +2,8 @@
 
 Jeu de dépannage en 3D à la première personne par FBA Games.
 
+**[🎮 Jouer à Courant Coupé en ligne](https://courant-coupe-fba.relaxedcoral1.chatgpt.site/)**
+
 ## Missions
 
 1. La première fournée — boulangerie
@@ -12,7 +14,9 @@ Jeu de dépannage en 3D à la première personne par FBA Games.
 
 ## Jouer
 
-Ouvrir `dist/index.html` dans un navigateur récent, ou servir `dist/` sur un hébergement statique. Le jeu fonctionne hors ligne. Chaque mission réussie débloque la suivante. « Jouer » ouvre la liste des missions et « Continuer à jouer » reprend la mission en cours ou propose la prochaine intervention disponible. La progression est enregistrée dans le navigateur.
+Pour jouer dans ton navigateur, utilise le lien ci-dessus. Pour jouer hors ligne, télécharge le dépôt puis ouvre le fichier `dist/index.html` depuis ton appareil.
+
+Chaque mission réussie débloque la suivante. « Jouer » ouvre la liste des missions et « Continuer à jouer » reprend la mission en cours ou propose la prochaine intervention disponible. La progression est enregistrée dans le navigateur.
 
 - Téléphone en paysage : joystick à gauche, glissement sur la scène pour regarder et bouton d’action à droite.
 - Clavier : ZQSD ou WASD pour marcher. Flèches gauche/droite ou glissement à la souris pour regarder. E pour interagir.
